@@ -1,0 +1,10 @@
+{
+  "identifier": "default",
+  "description": "Default capability for Stash workspace manager",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "store:default",
+    "dialog:default"
+  ]
+}
