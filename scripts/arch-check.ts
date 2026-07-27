@@ -6,6 +6,8 @@
  *  2. Every .vue import in src/ points to a file that actually exists
  *  3. Every type exported from types.ts is referenced somewhere in src/
  *  4. The Tauri capabilities JSON parses without error
+ *  5. Every registered command is actually invoked from the frontend
+ *  6. Every Rust module declared in lib.rs has a corresponding source file
  */
 
 import { readFileSync, existsSync, readdirSync, statSync } from "fs";
@@ -158,6 +160,52 @@ if (existsSync(capDir)) {
   }
 } else {
   warn("src-tauri/capabilities/ directory not found — skipping");
+}
+
+// ── 5. Registered commands are actually used ─────────────────────────────────
+console.log("\n[5] Tauri command usage");
+
+// Commands kept deliberately even though the frontend does not call them.
+// Anything not listed here that goes unused is dead IPC surface.
+const ALLOW_UNINVOKED = new Map<string, string>([
+  ["get_screen_size", "diagnostic helper, kept for debugging monitor issues"],
+  ["show_window", "tray and global shortcut show the window from Rust directly"],
+]);
+
+const invoked = new Set(
+  [...nonTypesContent.matchAll(/invoke(?:<[^>]*>)?\(\s*["'](\w+)["']/g)].map((m) => m[1])
+);
+
+for (const cmd of registered) {
+  if (invoked.has(cmd)) {
+    pass(`${cmd} is invoked from the frontend`);
+  } else if (ALLOW_UNINVOKED.has(cmd)) {
+    warn(`${cmd} — registered but never invoked (${ALLOW_UNINVOKED.get(cmd)})`);
+  } else {
+    fail(`${cmd} is registered in generate_handler! but never invoked from src/`);
+  }
+}
+
+for (const cmd of invoked) {
+  if (!registered.includes(cmd)) {
+    fail(`Frontend calls invoke("${cmd}") but no such command is registered`);
+  }
+}
+
+// ── 6. Declared Rust modules exist ───────────────────────────────────────────
+console.log("\n[6] Rust module declarations");
+
+// `mod foo;` lines, ignoring any that are commented out.
+const declaredMods = [...libRs.matchAll(/^\s*(?:pub\s+)?mod\s+(\w+)\s*;/gm)].map((m) => m[1]);
+
+for (const mod of declaredMods) {
+  const modPath = join(ROOT, `src-tauri/src/${mod}.rs`);
+  const modDir = join(ROOT, `src-tauri/src/${mod}/mod.rs`);
+  if (existsSync(modPath) || existsSync(modDir)) {
+    pass(`mod ${mod} resolves to a source file`);
+  } else {
+    fail(`lib.rs declares "mod ${mod};" but src-tauri/src/${mod}.rs does not exist`);
+  }
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

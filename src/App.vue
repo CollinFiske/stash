@@ -10,6 +10,7 @@ import TemplateModal from "./components/TemplateModal.vue";
 import RestoreModal from "./components/RestoreModal.vue";
 import EditGroupModal from "./components/EditGroupModal.vue";
 import CommandPalette from "./components/CommandPalette.vue";
+import BrowserPanel from "./components/BrowserPanel.vue";
 import AboutPage from "./pages/AboutPage.vue";
 import FaqPage from "./pages/FaqPage.vue";
 import ContactPage from "./pages/ContactPage.vue";
@@ -21,10 +22,12 @@ import {
   loadTemplateOrder, saveTemplateOrder,
 } from "./store";
 import { autoLayout } from "./layout";
+import { exeBase } from "./paths";
 import HardFreezeModal from "./components/HardFreezeModal.vue";
 import type {
   CapturedApp, SavedGroup, ProjectTemplate,
   RestoreSummary, HardFreeze, StashExport,
+  BridgeStatus, BrowserSnapshot, CloseSummary,
 } from "./types";
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -33,6 +36,10 @@ const templates = ref<Record<string, ProjectTemplate>>({});
 const capturedApps = ref<CapturedApp[]>([]);
 const restoreSummary = ref<RestoreSummary | null>(null);
 const openApps = ref<CapturedApp[]>([]);
+
+// Browser extension bridge
+const bridgeStatus = ref<BridgeStatus | null>(null);
+const browserSnapshot = ref<BrowserSnapshot | null>(null);
 
 // Ordering
 const groupOrder = ref<string[]>([]);
@@ -55,6 +62,7 @@ const showSnapshot = ref(false);
 const showTemplate = ref(false);
 const showRestore = ref(false);
 const showPalette = ref(false);
+const showBrowser = ref(false);
 const capturingLoading = ref(false);
 const savingTemplate = ref(false);
 const launchingGroup = ref<string | null>(null);
@@ -104,10 +112,6 @@ const allTags = computed(() => {
 });
 
 // ── Computed: filtered + sorted lists ─────────────────────────────────────
-function exeBase(path: string): string {
-  return path.replace(/\\/g, "/").split("/").pop()?.toLowerCase().replace(/\.exe$/i, "") ?? "";
-}
-
 function matchesSearch<T extends SavedGroup | ProjectTemplate>(item: T): boolean {
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return true;
@@ -181,19 +185,14 @@ const hasResults = computed(
 );
 
 // ── Active detection ──────────────────────────────────────────────────────────
-function exeBaseName(exePath: string): string {
-  const base = exePath.replace(/\\/g, "/").split("/").pop()?.toLowerCase() ?? exePath.toLowerCase();
-  return base.replace(/\.exe$/i, "");
-}
-
 function isAppOpen(exePath: string, isVscode: boolean, contextPath: string | null): boolean {
-  const name = exeBaseName(exePath);
+  const name = exeBase(exePath);
   if (isVscode && contextPath) {
     return openApps.value.some(
-      (a) => exeBaseName(a.exe_path) === name && a.context_path === contextPath
+      (a) => exeBase(a.exe_path) === name && a.context_path === contextPath
     );
   }
-  return openApps.value.some((a) => exeBaseName(a.exe_path) === name);
+  return openApps.value.some((a) => exeBase(a.exe_path) === name);
 }
 
 function isGroupActive(group: SavedGroup): boolean {
@@ -214,6 +213,16 @@ async function refreshOpenApps() {
     openApps.value = apps;
   } catch {
     // silently ignore
+  }
+}
+
+// ── Browser bridge ────────────────────────────────────────────────────────────
+async function refreshBridge() {
+  try {
+    bridgeStatus.value = await invoke<BridgeStatus>("bridge_status");
+    browserSnapshot.value = await invoke<BrowserSnapshot | null>("browser_state");
+  } catch {
+    bridgeStatus.value = null;
   }
 }
 
@@ -286,17 +295,17 @@ function checkFreezes() {
   const currentDay = now.getDay();
   const currentSecs = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
 
-  type FreezeItem = { key: string; name: string; freeze: HardFreeze; exePaths: string[] };
+  type FreezeItem = { key: string; name: string; freeze: HardFreeze; apps: CapturedApp[] };
   const all: FreezeItem[] = [];
 
   for (const g of Object.values(groups.value)) {
     if (g.hard_freeze?.enabled) {
-      all.push({ key: `g-${g.name}-${today}`, name: g.name, freeze: g.hard_freeze, exePaths: g.apps.map((a) => a.exe_path) });
+      all.push({ key: `g-${g.name}-${today}`, name: g.name, freeze: g.hard_freeze, apps: g.apps });
     }
   }
   for (const t of Object.values(templates.value)) {
     if (t.hard_freeze?.enabled) {
-      all.push({ key: `t-${t.name}-${today}`, name: t.name, freeze: t.hard_freeze, exePaths: t.entries.map((e) => e.exe_path) });
+      all.push({ key: `t-${t.name}-${today}`, name: t.name, freeze: t.hard_freeze, apps: entriesToApps(t) });
     }
   }
 
@@ -314,7 +323,10 @@ function checkFreezes() {
     if (until <= 0 && until > -30) {
       triggeredToday.add(item.key);
       freezeWarning.value = null;
-      invoke("close_apps", { exePaths: item.exePaths }).catch(() => {});
+      // A scheduled freeze escalates to a forced close: the user asked for the
+      // workspace to be gone at this time, and nobody is present to answer a
+      // "save your work?" prompt.
+      invoke("close_workspace", { apps: item.apps, force: true }).catch(() => {});
       showToast(`❄ Hard Freeze: "${item.name}" closed`, "success");
       refreshOpenApps();
       return;
@@ -331,8 +343,11 @@ onMounted(async () => {
   [groups.value, templates.value, groupOrder.value, templateOrder.value] = await Promise.all([
     loadGroups(), loadTemplates(), loadGroupOrder(), loadTemplateOrder(),
   ]);
-  await refreshOpenApps();
-  pollTimer = setInterval(refreshOpenApps, 8000);
+  await Promise.all([refreshOpenApps(), refreshBridge()]);
+  pollTimer = setInterval(() => {
+    refreshOpenApps();
+    refreshBridge();
+  }, 8000);
   freezeTimer = setInterval(checkFreezes, 5000);
 
   // Listen for global shortcut palette-open event from Rust
@@ -520,11 +535,50 @@ async function handleSaveEditGroup(updated: SavedGroup) {
 }
 
 // ── Close apps ────────────────────────────────────────────────────────────────
+/**
+ * Materialise a template's entries as CapturedApp records.
+ *
+ * Templates store no geometry, so `autoLayout` assigns a grid slot to each entry
+ * at launch time. The same shape is what `close_workspace` expects.
+ */
+function entriesToApps(tmpl: ProjectTemplate): CapturedApp[] {
+  const positions = autoLayout(tmpl.entries.length);
+  return tmpl.entries.map((entry, i) => ({
+    name: entry.name,
+    exe_path: entry.exe_path,
+    title: entry.name,
+    is_vscode: entry.is_vscode,
+    is_browser: entry.is_browser,
+    is_terminal: entry.is_terminal ?? false,
+    context_path: entry.context_path,
+    target_url: entry.target_url,
+    working_dir: entry.working_dir ?? null,
+    relative_position: positions[i],
+    browser_window: null,
+  }));
+}
+
+/** Summarise a close so the user knows what actually happened. */
+function describeClose(summary: CloseSummary, name: string): string {
+  const parts: string[] = [];
+  if (summary.closed > 0) parts.push(`${summary.closed} window(s) closed`);
+  if (summary.browser_windows_closed > 0) {
+    parts.push(`${summary.browser_windows_closed} browser window(s)`);
+  }
+  if (summary.force_killed > 0) parts.push(`${summary.force_killed} force-closed`);
+  if (parts.length === 0) return `Nothing was running in "${name}"`;
+  return `"${name}": ${parts.join(", ")}`;
+}
+
 async function handleCloseGroupApps(group: SavedGroup) {
   try {
-    await invoke("close_apps", { exePaths: group.apps.map((a) => a.exe_path) });
-    showToast(`Closed apps in "${group.name}"`, "success");
-    await refreshOpenApps();
+    const summary = await invoke<CloseSummary>("close_workspace", {
+      apps: group.apps,
+      force: false,
+    });
+    showToast(describeClose(summary, group.name), "success");
+    // Applications may show a save prompt, so the window list settles a moment later.
+    setTimeout(refreshOpenApps, 1500);
   } catch (err) {
     showToast(String(err), "error");
   }
@@ -532,9 +586,12 @@ async function handleCloseGroupApps(group: SavedGroup) {
 
 async function handleCloseTemplateApps(tmpl: ProjectTemplate) {
   try {
-    await invoke("close_apps", { exePaths: tmpl.entries.map((e) => e.exe_path) });
-    showToast(`Closed apps in "${tmpl.name}"`, "success");
-    await refreshOpenApps();
+    const summary = await invoke<CloseSummary>("close_workspace", {
+      apps: entriesToApps(tmpl),
+      force: false,
+    });
+    showToast(describeClose(summary, tmpl.name), "success");
+    setTimeout(refreshOpenApps, 1500);
   } catch (err) {
     showToast(String(err), "error");
   }
@@ -585,17 +642,7 @@ async function handleSaveTemplate(template: ProjectTemplate) {
 async function handleLaunchTemplate(template: ProjectTemplate) {
   launchingTemplate.value = template.name;
   try {
-    const positions = autoLayout(template.entries.length);
-    const apps: CapturedApp[] = template.entries.map((entry, i) => ({
-      name: entry.name,
-      exe_path: entry.exe_path,
-      title: entry.name,
-      is_vscode: entry.is_vscode,
-      is_browser: entry.is_browser,
-      context_path: entry.context_path,
-      target_url: entry.target_url,
-      relative_position: positions[i],
-    }));
+    const apps = entriesToApps(template);
     const summary = await invoke<RestoreSummary>("restore_workspace", { apps });
     restoreSummary.value = summary;
     showRestore.value = true;
@@ -826,6 +873,22 @@ function handlePaletteLaunchTemplate(name: string) {
             </svg>
             <span>Snapshot</span>
           </button>
+          <button
+            class="btn btn-ghost browser-trigger-btn"
+            :class="{ 'browser-connected': bridgeStatus?.connected }"
+            @click="showBrowser = true; refreshBridge()"
+            :aria-label="bridgeStatus?.connected ? 'Browser connected' : 'Connect browser extension'"
+            :title="bridgeStatus?.connected
+              ? `Browser connected — ${bridgeStatus.tab_count} tabs across ${bridgeStatus.window_count} windows`
+              : 'Connect the Stash Bridge extension to capture browser tabs'"
+          >
+            <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            <span v-if="bridgeStatus?.connected" class="browser-tab-badge">{{ bridgeStatus.tab_count }}</span>
+          </button>
           <button class="btn btn-ghost palette-trigger-btn" @click="showPalette = true" title="Quick launch (Ctrl+Shift+S)">
             <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
@@ -1045,6 +1108,17 @@ function handlePaletteLaunchTemplate(name: string) {
         @save="handleSaveFreeze"
         @remove="handleRemoveFreeze"
         @cancel="freezeTarget = null"
+      />
+    </transition>
+
+    <!-- Browser bridge panel -->
+    <transition name="fade">
+      <BrowserPanel
+        v-if="showBrowser"
+        :status="bridgeStatus"
+        :snapshot="browserSnapshot"
+        @refresh="refreshBridge"
+        @close="showBrowser = false"
       />
     </transition>
 

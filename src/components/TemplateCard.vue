@@ -2,6 +2,7 @@
 import type { ProjectTemplate, TemplateEntry } from "../types";
 import AppIcon from "./AppIcon.vue";
 import KebabMenu from "./KebabMenu.vue";
+import { baseName, hostOf } from "../paths";
 
 defineProps<{
   template: ProjectTemplate;
@@ -66,11 +67,13 @@ function formatLastUsed(iso: string): string {
 
 function chipLabel(e: TemplateEntry): string {
   if (e.is_vscode && e.context_path) {
-    const parts = e.context_path.replace(/\\/g, "/").split("/");
-    return parts[parts.length - 1] || e.name;
+    return baseName(e.context_path) || e.name;
   }
   if (e.is_browser && e.target_url) {
-    try { return new URL(e.target_url).hostname; } catch { return e.name; }
+    return hostOf(e.target_url);
+  }
+  if (e.is_terminal && e.working_dir) {
+    return baseName(e.working_dir) || e.name;
   }
   return e.name;
 }
@@ -157,6 +160,7 @@ function chipLabel(e: TemplateEntry): string {
         <span class="app-chip-label">{{ chipLabel(entry) }}</span>
         <span v-if="entry.is_vscode" class="app-chip-badge tmpl-badge">vsc</span>
         <span v-else-if="entry.is_browser" class="app-chip-badge tmpl-badge">web</span>
+        <span v-else-if="entry.is_terminal" class="app-chip-badge tmpl-badge">cwd</span>
       </div>
     </div>
 

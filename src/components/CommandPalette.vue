@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
 import type { SavedGroup, ProjectTemplate } from "../types";
+import { exeBase } from "../paths";
 
 const props = defineProps<{
   groups: Record<string, SavedGroup>;
@@ -40,10 +41,6 @@ const allItems = computed<PaletteItem[]>(() => {
     return a.name.localeCompare(b.name);
   });
 });
-
-function exeBase(path: string): string {
-  return path.replace(/\\/g, "/").split("/").pop()?.toLowerCase().replace(/\.exe$/i, "") ?? path.toLowerCase();
-}
 
 const filtered = computed<PaletteItem[]>(() => {
   const q = query.value.trim().toLowerCase();

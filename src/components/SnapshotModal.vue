@@ -30,9 +30,17 @@ function removeApp(index: number) {
 // ── Add-app form (edit mode) ──────────────────────────────────────────────────
 const newPath = ref("");
 const newName = ref("");
-const newType = ref<"regular" | "vscode" | "browser">("regular");
+const newType = ref<"regular" | "vscode" | "browser" | "terminal">("regular");
 const newContext = ref("");
 const newUrl = ref("");
+const newWorkingDir = ref("");
+
+/** Terminal emulators and shells that accept a starting directory. */
+const TERMINALS = [
+  "cmd", "powershell", "pwsh", "wt", "windowsterminal", "conhost",
+  "bash", "zsh", "fish", "alacritty", "wezterm", "kitty", "hyper",
+  "tabby", "mintty", "gnome-terminal", "konsole", "xterm", "iterm",
+];
 
 function inferName(path: string): string {
   const parts = path.replace(/\\/g, "/").split("/");
@@ -41,14 +49,26 @@ function inferName(path: string): string {
 
 function autoDetect() {
   const p = newPath.value.toLowerCase();
+  const stem = inferName(newPath.value).toLowerCase();
   if (p === "code" || p.includes("\\code.exe") || p.includes("code - insiders")) {
     newType.value = "vscode";
   } else if (["chrome", "firefox", "msedge", "brave", "safari", "arc"].some((b) => p.includes(b))) {
     newType.value = "browser";
+  } else if (TERMINALS.includes(stem)) {
+    newType.value = "terminal";
   } else {
     newType.value = "regular";
   }
   if (!newName.value) newName.value = inferName(newPath.value);
+}
+
+async function browseFolder() {
+  try {
+    const selected = await open({ directory: true, multiple: false, title: "Select Starting Directory" });
+    if (typeof selected === "string" && selected) newWorkingDir.value = selected;
+  } catch {
+    // cancelled
+  }
 }
 
 async function browseFile() {
@@ -80,22 +100,42 @@ function addApp() {
     title: newName.value.trim() || inferName(path),
     is_vscode: newType.value === "vscode",
     is_browser: newType.value === "browser",
+    is_terminal: newType.value === "terminal",
     context_path: newType.value === "vscode" ? newContext.value.trim() || null : null,
     target_url: newType.value === "browser" ? newUrl.value.trim() || null : null,
+    working_dir: newType.value === "terminal" ? newWorkingDir.value.trim() || null : null,
     relative_position: { x: 0.0, y: 0.0, w: 0.5, h: 0.8 },
+    browser_window: null,
   });
   newPath.value = "";
   newName.value = "";
   newType.value = "regular";
   newContext.value = "";
   newUrl.value = "";
+  newWorkingDir.value = "";
 }
 
 function appSublabel(app: CapturedApp): string | null {
   if (app.is_vscode && app.context_path) return app.context_path;
+  if (app.is_terminal && app.working_dir) return `cd ${app.working_dir}`;
+  // With the extension connected, show what the browser window actually holds.
+  if (app.is_browser && app.browser_window) {
+    const n = app.browser_window.tabs.length;
+    const groups = app.browser_window.groups.map((g) => g.title).filter(Boolean);
+    const groupPart = groups.length ? ` · ${groups.join(", ")}` : "";
+    return `${n} tab${n !== 1 ? "s" : ""}${groupPart}`;
+  }
   if (app.is_browser && app.target_url) {
     try { return new URL(app.target_url).hostname; } catch { return app.target_url; }
   }
+  return null;
+}
+
+/** Short type badge shown on the right of each captured row. */
+function appBadge(app: CapturedApp): string | null {
+  if (app.is_vscode) return "VS Code";
+  if (app.is_browser) return app.browser_window ? "tabs saved" : "browser";
+  if (app.is_terminal) return app.working_dir ? "terminal" : "terminal (no dir)";
   return null;
 }
 
@@ -156,8 +196,7 @@ function handleSave() {
                   <div class="captured-name">{{ app.name }}</div>
                   <div v-if="appSublabel(app)" class="captured-sub">{{ appSublabel(app) }}</div>
                 </div>
-                <span v-if="app.is_vscode" class="app-chip-badge">VS Code</span>
-                <span v-else-if="app.is_browser" class="app-chip-badge">browser</span>
+                <span v-if="appBadge(app)" class="app-chip-badge">{{ appBadge(app) }}</span>
                 <button
                   v-if="editMode"
                   class="btn-icon snapshot-remove-btn"
@@ -197,6 +236,7 @@ function handleSave() {
                     <option value="regular">Regular App</option>
                     <option value="vscode">VS Code</option>
                     <option value="browser">Browser</option>
+                    <option value="terminal">Terminal</option>
                   </select>
                 </div>
               </div>
@@ -207,6 +247,13 @@ function handleSave() {
               <div v-if="newType === 'browser'" class="form-group" style="margin-bottom:0;">
                 <label class="form-label add-app-label">URL (optional)</label>
                 <input class="form-input" v-model="newUrl" placeholder="https://github.com/pulls" />
+              </div>
+              <div v-if="newType === 'terminal'" class="form-group" style="margin-bottom:0;">
+                <label class="form-label add-app-label">Starting directory (optional)</label>
+                <div class="browse-row">
+                  <input class="form-input" v-model="newWorkingDir" placeholder="C:\Projects\my-app" />
+                  <button class="btn btn-ghost browse-btn" type="button" @click="browseFolder" title="Browse for folder">📂</button>
+                </div>
               </div>
             </div>
             <button class="btn btn-ghost" style="margin-top:10px;" @click="addApp" :disabled="!newPath.trim()">

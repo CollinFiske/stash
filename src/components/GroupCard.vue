@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import type { SavedGroup } from "../types";
+import type { SavedGroup, CapturedApp } from "../types";
 import AppIcon from "./AppIcon.vue";
 import KebabMenu from "./KebabMenu.vue";
+import { baseName, hostOf, tabSummary, groupTitles } from "../paths";
 
 defineProps<{
   group: SavedGroup;
@@ -64,15 +65,34 @@ function formatLastUsed(iso: string): string {
   }
 }
 
-function chipLabel(app: { name: string; context_path: string | null; target_url: string | null; is_vscode: boolean; is_browser: boolean }): string {
+function chipLabel(app: CapturedApp): string {
   if (app.is_vscode && app.context_path) {
-    const parts = app.context_path.replace(/\\/g, "/").split("/");
-    return parts[parts.length - 1] || app.name;
+    return baseName(app.context_path) || app.name;
+  }
+  // A captured browser window carries its whole tab list — that is far more
+  // useful on a card than the URL of whichever tab happened to be focused.
+  if (app.is_browser && app.browser_window) {
+    return tabSummary(app.browser_window);
   }
   if (app.is_browser && app.target_url) {
-    try { return new URL(app.target_url).hostname; } catch { return app.name; }
+    return hostOf(app.target_url);
+  }
+  if (app.is_terminal && app.working_dir) {
+    return baseName(app.working_dir) || app.name;
   }
   return app.name;
+}
+
+/** Named tab groups inside a captured browser window, for the chip tooltip. */
+function chipTitle(app: CapturedApp): string {
+  if (app.is_terminal && app.working_dir) return app.working_dir;
+  if (app.is_vscode && app.context_path) return app.context_path;
+  if (app.is_browser && app.browser_window) {
+    const groups = groupTitles(app.browser_window);
+    const heading = groups.length ? `Groups: ${groups.join(", ")}\n` : "";
+    return heading + app.browser_window.tabs.slice(0, 12).map((t) => t.title || t.url).join("\n");
+  }
+  return app.title;
 }
 </script>
 
@@ -151,12 +171,13 @@ function chipLabel(app: { name: string; context_path: string | null; target_url:
         v-for="app in group.apps"
         :key="app.exe_path + app.title"
         class="app-chip"
-        :title="app.title"
+        :title="chipTitle(app)"
       >
         <AppIcon :name="app.name" :path="app.exe_path" :is-vscode="app.is_vscode" :is-browser="app.is_browser" :size="16" />
         <span class="app-chip-label">{{ chipLabel(app) }}</span>
         <span v-if="app.is_vscode" class="app-chip-badge">vsc</span>
         <span v-else-if="app.is_browser" class="app-chip-badge">web</span>
+        <span v-else-if="app.is_terminal" class="app-chip-badge">cwd</span>
       </div>
     </div>
 

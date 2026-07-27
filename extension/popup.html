@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Stash Bridge</title>
+    <style>
+      :root {
+        --bg: #111214; --surface: #1c1d21; --border: #2e3038;
+        --accent: #6ee7b7; --text: #f4f4f5; --muted: #a1a1aa; --danger: #f87171;
+        color-scheme: dark;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        width: 280px; padding: 14px;
+        font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: var(--bg); color: var(--text); font-size: 13px;
+      }
+      h1 { font-size: 0.95rem; display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+      .dot.on { background: var(--accent); box-shadow: 0 0 8px rgba(110,231,183,0.6); }
+      .dot.off { background: var(--danger); }
+      .stat-row { display: flex; gap: 8px; margin-bottom: 12px; }
+      .stat {
+        flex: 1; background: var(--surface); border: 1px solid var(--border);
+        border-radius: 8px; padding: 9px 10px; text-align: center;
+      }
+      .stat .n { font-size: 1.15rem; font-weight: 700; }
+      .stat .l { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+      .msg { font-size: 0.78rem; color: var(--muted); margin-bottom: 12px; line-height: 1.45; }
+      .msg.err { color: var(--danger); }
+      button {
+        font: inherit; font-weight: 600; width: 100%; padding: 8px; border-radius: 6px;
+        border: 1px solid var(--border); background: #25262b; color: var(--text);
+        cursor: pointer; margin-bottom: 6px;
+      }
+      button:hover { background: #2c2e33; }
+      button.primary { background: var(--accent); color: #06281c; border-color: transparent; }
+    </style>
+  </head>
+  <body>
+    <h1><span class="dot" id="dot"></span> Stash Bridge</h1>
+
+    <div class="stat-row">
+      <div class="stat"><div class="n" id="windows">–</div><div class="l">Windows</div></div>
+      <div class="stat"><div class="n" id="tabs">–</div><div class="l">Tabs</div></div>
+    </div>
+
+    <div class="msg" id="msg">Checking…</div>
+
+    <button class="primary" id="push">Sync now</button>
+    <button id="options">Settings</button>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

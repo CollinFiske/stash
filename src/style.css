@@ -193,7 +193,7 @@ h2 {
   flex-shrink: 0;
   border-bottom-left-radius: var(--radius-lg);
   border-bottom-right-radius: var(--radius-lg);
-  
+  gap: 12px;
 }
 
 .header-brand {
@@ -1067,6 +1067,12 @@ h2 {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* The header carries seven controls. Wrapping to a second row is the only
+     acceptable failure mode at narrow widths — buttons must never be pushed
+     off the edge where they cannot be reached. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 /* ── Page navigation container ───────────────────────────────────────────── */
@@ -2133,3 +2139,230 @@ h2 {
   opacity: 0.9;
 }
 
+
+/* ── Browser bridge: header trigger ──────────────────────────────────────── */
+.browser-trigger-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+}
+
+/* A connected extension tints the button with the accent colour, matching the
+   "active workspace" language used on cards. */
+.browser-connected {
+  color: var(--accent);
+  border-color: rgba(110, 231, 183, 0.35);
+  background: var(--accent-glow);
+}
+
+.browser-tab-badge {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #06281c;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+
+/* ── Browser bridge: panel ───────────────────────────────────────────────── */
+.bridge-chip {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.bridge-chip-connected {
+  background: var(--accent-glow);
+  border-color: rgba(110, 231, 183, 0.4);
+  color: var(--accent);
+}
+
+.bridge-chip-waiting {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
+
+.bridge-chip-offline {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: var(--danger);
+}
+
+.bridge-alert {
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.bridge-alert strong {
+  display: block;
+  color: var(--danger);
+  margin-bottom: 4px;
+}
+
+.bridge-stats {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.bridge-stat {
+  flex: 1;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.bridge-stat-n {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+.bridge-stat-l {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.bridge-window-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.bridge-window {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.bridge-window-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 7px;
+}
+
+.bridge-window-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+/* Tab-group pills mirror Chrome's own group colours so the panel reads as a
+   recognisable picture of the browser rather than an abstract list. */
+.bridge-group-pill {
+  font-size: 0.66rem;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.bridge-group-pill[data-color="blue"]   { color: #8ab4f8; border-color: rgba(138,180,248,0.4); }
+.bridge-group-pill[data-color="red"]    { color: #f28b82; border-color: rgba(242,139,130,0.4); }
+.bridge-group-pill[data-color="yellow"] { color: #fdd663; border-color: rgba(253,214,99,0.4); }
+.bridge-group-pill[data-color="green"]  { color: #81c995; border-color: rgba(129,201,149,0.4); }
+.bridge-group-pill[data-color="pink"]   { color: #ff8bcb; border-color: rgba(255,139,203,0.4); }
+.bridge-group-pill[data-color="purple"] { color: #c58af9; border-color: rgba(197,138,249,0.4); }
+.bridge-group-pill[data-color="cyan"]   { color: #78d9ec; border-color: rgba(120,217,236,0.4); }
+.bridge-group-pill[data-color="orange"] { color: #fbad70; border-color: rgba(251,173,112,0.4); }
+
+.bridge-window-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.bridge-tab-chip {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bridge-tab-more {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  padding: 2px 4px;
+  align-self: center;
+}
+
+.bridge-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 10px 0;
+}
+
+.bridge-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-top: 12px;
+}
+
+.bridge-token {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+}
+
+.bridge-steps {
+  margin: 14px 0 0 18px;
+  color: var(--text-secondary);
+  font-size: 0.83rem;
+  line-height: 1.7;
+}
+
+.bridge-steps code {
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+/* ── Terminal working-directory chip ─────────────────────────────────────── */
+.app-chip-dir {
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  font-family: ui-monospace, Consolas, monospace;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* keep the meaningful tail of a long path visible */
+  text-align: left;
+}

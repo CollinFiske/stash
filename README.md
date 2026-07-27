@@ -1,6 +1,23 @@
 # Stash — Workspace Snapshot Manager
 
-Stash is a cross-platform desktop application built with **Tauri v2** and **Vue 3** that lets you save a snapshot of your open application windows at the end of the day and restore them exactly—with positions—the next morning.
+Stash is a cross-platform desktop application built with **Tauri v2**, **Rust** and
+**Vue 3** that saves your open application windows as a named workspace and
+restores them later — with positions, VS Code project folders, terminal working
+directories, and browser tabs intact.
+
+Local-first: no account, no cloud, no telemetry. Everything lives in one JSON
+file in your OS app-data folder.
+
+---
+
+## What it captures
+
+| | Without help from the app | What Stash captures |
+|---|---|---|
+| **Any window** | — | executable, title, position, size, monitor |
+| **VS Code** | window title only shows a folder *name* | the **absolute project path**, resolved from VS Code's own `workspaceStorage` |
+| **Terminals** | reopen at the shell's default directory | the **working directory** the shell was actually in |
+| **Browsers** | the OS cannot see a single tab | every **tab, pinned tab and tab group**, via the [Stash Bridge extension](docs/BROWSER-EXTENSION.md) |
 
 ---
 
@@ -8,75 +25,129 @@ Stash is a cross-platform desktop application built with **Tauri v2** and **Vue 
 
 ### IPC Bridge
 
-The frontend (Vue 3 + Vite) communicates with the Rust backend via Tauri's IPC layer. Every user action that touches native OS APIs is issued as a `tauri::command` call using `invoke()` from `@tauri-apps/api/core`:
+The Vue frontend talks to the Rust backend through Tauri's IPC layer. Every
+action that touches native OS APIs is a `tauri::command` invoked with
+`invoke()` from `@tauri-apps/api/core`:
 
 | Frontend call | Rust command | What it does |
 |---|---|---|
-| `invoke("capture_snapshot")` | `commands::capture_snapshot` | Queries all open windows via x-win and returns relative-position data |
-| `invoke("restore_workspace", { apps })` | `commands::restore_workspace` | Launches each saved app and schedules background window positioning |
-| `invoke("get_screen_size")` | `commands::get_screen_size` | Returns the primary monitor's pixel dimensions |
+| `invoke("capture_snapshot")` | `commands::capture_snapshot` | Enumerates open windows, resolves VS Code paths and terminal directories, and attaches browser tab state |
+| `invoke("restore_workspace", { apps })` | `commands::restore_workspace` | Launches each app, then claims and positions one window per app |
+| `invoke("close_workspace", { apps, force })` | `commands::close_workspace` | Gracefully closes a workspace's windows; optionally escalates to termination |
+| `invoke("bridge_status")` | `commands::bridge_status` | Pairing token and live connection state for the browser extension |
+| `invoke("browser_state")` | `commands::browser_state` | The extension's latest view of every browser window and tab |
+| `invoke("get_screen_size")` | `commands::get_screen_size` | Primary monitor dimensions (diagnostic) |
+| `invoke("write_file" / "read_file")` | `commands::write_file` / `read_file` | Workspace export and import |
+| `invoke("show_window")` | `commands::show_window` | Show and focus the main window |
+
+Rust → JS events: **`palette-open`**, emitted by the `Ctrl+Shift+S` global shortcut.
 
 ### JSON Persistence
 
-All data is persisted via `tauri-plugin-store` to a local `workspaces.json` file located in the app's data directory (no cloud, no SQLite). The frontend manages reads/writes directly through `@tauri-apps/plugin-store`.
-
-Schema:
-
-```json
-{
-  "saved_groups": {
-    "Morning Coding": {
-      "name": "Morning Coding",
-      "created_at": "2026-06-25T09:00:00.000Z",
-      "apps": [
-        {
-          "name": "Code",
-          "exe_path": "C:\\...\\Code.exe",
-          "title": "main.rs — stash — Visual Studio Code",
-          "is_vscode": true,
-          "is_browser": false,
-          "context_path": "stash",
-          "target_url": null,
-          "relative_position": { "x": 0.0, "y": 0.0, "w": 0.5, "h": 1.0 }
-        }
-      ]
-    }
-  }
-}
-```
+All data is persisted via `tauri-plugin-store` to `workspaces.json` in the app's
+data directory. Four keys: `saved_groups`, `project_templates`, `group_order`,
+`template_order`. Workspaces and templates are keyed by name.
 
 ### Window Capture (`src-tauri/src/capture.rs`)
 
 1. Calls `x_win::get_open_windows()` to enumerate all visible windows.
-2. Filters out system noise (Program Manager, Taskbar, empty titles, etc.).
-3. Deduplicates by `exe_path + title` to avoid multiple shell processes appearing as separate entries.
-4. Detects VS Code by matching `code.exe` or `visual studio code` in the name/path.
-5. Extracts the VS Code workspace folder by parsing the title: `"file — workspace — Visual Studio Code"` → `"workspace"`.
-6. Detects browsers (Chrome, Edge, Brave, Firefox, Safari, Arc) and reads the active tab URL from x-win's accessibility layer.
-7. Converts absolute pixel coordinates to relative floats using the primary monitor's dimensions.
+2. Filters system noise (Program Manager, taskbar, Windows Input Experience, …).
+3. Skips Stash itself, including `target/debug` dev builds.
+4. Deduplicates by `exe_path + title`, so multi-process apps appear once.
+5. Classifies each window as VS Code / browser / terminal / regular.
+6. **VS Code** — parses the folder name out of the title, then resolves it to a
+   real path (see below).
+7. **Terminals** — reads the shell's working directory (see below).
+8. **Browsers** — matches the window against the extension's report by geometry
+   and attaches the full tab list.
+9. Converts absolute pixel coordinates to fractions of the monitor the window
+   sits on, and records that monitor's index.
 
 ### Dynamic Rescaling
 
-Positions are never stored as raw pixels. Instead:
+Positions are never stored as raw pixels:
 
 ```
-relative_x = window_x / screen_width
-relative_y = window_y / screen_height
-relative_w = window_w / screen_width
-relative_h = window_h / screen_height
+relative_x = (window_x - monitor_x) / monitor_width
+relative_y = (window_y - monitor_y) / monitor_height
+relative_w =  window_w              / monitor_width
+relative_h =  window_h              / monitor_height
 ```
 
-On restore, the inverse is applied against the *current* monitor dimensions, so a layout snapped on a 4K monitor restores sensibly on a 1080p laptop.
+On restore the inverse is applied against the *current* monitor, so a layout
+snapped on a 4K display restores sensibly on a 1080p laptop. A window saved on a
+monitor that is no longer connected falls back to the primary.
 
-### Window Restore (`src-tauri/src/restore.rs`)
+### Window Restore (`src-tauri/src/restore.rs` + `position.rs`)
 
-1. Iterates the app list with a 400 ms stagger to avoid resource contention at launch.
-2. Calls the platform-native launcher for each app:
-   - **Windows**: `cmd /C start "" <exe>` (or `code <workspace>` for VS Code)
-   - **macOS**: `open -a "Visual Studio Code" <workspace>` / `open <url>`
-   - **Linux**: Direct binary invocation; `code <workspace>`
-3. Returns a `RestoreSummary` immediately (non-blocking).
-4. Spawns a background thread that polls `get_open_windows()` until each app's window appears, then applies `SetWindowPos` (Windows) / AppleScript (macOS) / `xdotool` (Linux).
+1. Browser windows are handed to the extension, which rebuilds them with their
+   tabs and groups. Everything else is launched as a process.
+2. Applications are **spawned directly** — `Command::new(exe_path)` — rather than
+   through `cmd /C start`. GUI apps get `CREATE_NO_WINDOW`; terminals get
+   `CREATE_NEW_CONSOLE`. This is what removed the console flashes and orphaned
+   shell processes.
+3. VS Code is always launched with `--new-window <absolute path>`, so two
+   projects never collapse into one window.
+4. Each app then **claims exactly one window** via `WindowClaimer`:
+   - windows that existed *before* the restore are recorded and are off-limits,
+   - once an app claims a window, no other app can take it,
+   - matching prefers the spawned PID, then the executable path.
+
+   This is what fixes two VS Code windows (or three Chrome windows) both
+   resolving to the same window — previously one got positioned twice and the
+   other not at all.
+5. Positioning runs on a background thread, so the UI returns immediately.
+
+### Closing a Workspace (`commands::close_workspace`)
+
+Windows are asked to close the way clicking ✕ would — `WM_CLOSE` on Windows,
+`quit` via AppleScript on macOS, `SIGTERM` on Linux — so applications can prompt
+about unsaved work. This replaced a blanket `taskkill /F /IM <exe>`, which
+force-killed *every* process sharing an image name and discarded unsaved work
+without asking. Passing `force: true` escalates to termination after a 2.5 s
+grace period; the scheduled Hard Freeze uses it, the Close Apps button does not.
+
+### VS Code Project Resolution (`src-tauri/src/vscode_state.rs`)
+
+A VS Code title only ever contains the folder's **base name**, never its path, so
+launching `code my-app` made VS Code create an empty *file* called `my-app`.
+Stash instead cross-references VS Code's own `workspaceStorage`: it reads each
+`workspace.json`, decodes the `file://` URI (percent-decoding plus the Windows
+drive-letter form `file:///c%3A/…` → `C:\…`), matches on base name, and
+tie-breaks on directory mtime to pick the most recently used project.
+
+### Terminal Working Directories (`src-tauri/src/procinfo.rs`)
+
+A terminal that reopens in `System32` is useless. Stash reads the directory
+directly rather than asking the shell:
+
+- **Windows** — `NtQueryInformationProcess` → PEB → `RTL_USER_PROCESS_PARAMETERS`
+  → `CurrentDirectory.DosPath`, read with `ReadProcessMemory`.
+- **Linux** — the `/proc/<pid>/cwd` symlink.
+- **macOS** — `lsof -a -p <pid> -d cwd -Fn`.
+
+Terminal *hosts* (`WindowsTerminal.exe`, `gnome-terminal`) sit in their own
+install directory, so Stash walks up to three levels of child processes to find
+the shell (`pwsh`, `bash`, …) and prefers its directory. Boring defaults like
+`C:\Windows\System32` are rejected.
+
+On restore the directory is passed as a launch argument — `wt -d <dir>`,
+`cmd /K cd /d <dir>`, `pwsh -NoExit -Command Set-Location …`,
+`alacritty --working-directory <dir>` — falling back to setting the child
+process's working directory for terminals with no such flag.
+
+### Win32 Bindings (`src-tauri/src/win32.rs`)
+
+Hand-written FFI declarations for the `user32` / `kernel32` / `ntdll` / `dwmapi`
+entry points no crate in the tree exposes: `EnumWindows`,
+`GetWindowThreadProcessId`, `PostMessageW(WM_CLOSE)`, `SetWindowPos`,
+`ShowWindow`, `CreateToolhelp32Snapshot`, `NtQueryInformationProcess`,
+`ReadProcessMemory`, and `DwmGetWindowAttribute` for detecting cloaked windows.
+Declared by hand rather than pulling in `windows-sys`, keeping the dependency
+tree and release binary small.
+
+`src-tauri/src/native.rs` is the cross-platform facade over this; nothing above
+it is platform-aware.
 
 ---
 
@@ -87,33 +158,57 @@ stash/
 ├── index.html                         Entry HTML
 ├── package.json                       Bun/Node dependencies
 ├── vite.config.ts                     Vite build config
-├── tsconfig.json                      TypeScript config
-├── public/
-│   └── stash.svg                      App icon (SVG)
+├── docs/
+│   ├── BROWSER-EXTENSION.md           Extension install + pairing walkthrough
+│   └── STASH-CONTEXT.md               Full project reference
+├── extension/                         Chrome MV3 extension ("Stash Bridge")
+│   ├── manifest.json
+│   ├── background.js                  Service worker: pushes state, polls commands
+│   ├── options.html / options.js      Pairing UI
+│   ├── popup.html / popup.js          Status popup
+│   └── icons/
+├── scripts/
+│   ├── arch-check.ts                  Architecture drift checker
+│   └── validate.ts                    Runs all 7 quality gates
 ├── src/                               Vue 3 frontend
 │   ├── main.ts                        Vue entry point
-│   ├── App.vue                        Root component — layout, state, orchestration
+│   ├── App.vue                        Root component — state and orchestration
 │   ├── style.css                      Global CSS design system (no Tailwind)
 │   ├── types.ts                       Shared TypeScript interfaces
-│   ├── store.ts                       tauri-plugin-store helpers (load/save/delete groups)
-│   └── components/
-│       ├── GroupCard.vue              Saved workspace card with Launch / Delete
-│       ├── SnapshotModal.vue          Capture modal — name input + app preview
-│       └── RestoreModal.vue           Restore result modal
+│   ├── store.ts                       tauri-plugin-store helpers
+│   ├── layout.ts                      autoLayout() grid generator
+│   ├── paths.ts                       Path / URL / tab-summary helpers
+│   ├── appicons.ts                    Inline-SVG app icon registry
+│   ├── components/
+│   │   ├── GroupCard.vue              Saved workspace card
+│   │   ├── TemplateCard.vue           Project template card
+│   │   ├── SnapshotModal.vue          Capture modal
+│   │   ├── TemplateModal.vue          Template create/edit
+│   │   ├── EditGroupModal.vue         Workspace rename / edit
+│   │   ├── HardFreezeModal.vue        Scheduled close configuration
+│   │   ├── BrowserPanel.vue           Extension pairing + live tab view
+│   │   ├── CommandPalette.vue         Ctrl+Shift+S quick launcher
+│   │   ├── RestoreModal.vue           Restore results
+│   │   ├── KebabMenu.vue              ⋮ dropdown
+│   │   └── AppIcon.vue                SVG icon wrapper
+│   └── pages/                         About / FAQ / Contact
 └── src-tauri/                         Tauri/Rust backend
-    ├── Cargo.toml                     Rust crate manifest
-    ├── build.rs                       Tauri build script
-    ├── tauri.conf.json                Tauri v2 configuration
-    ├── capabilities/
-    │   └── default.json               IPC permission grants (store:*, core:default)
+    ├── Cargo.toml
+    ├── capabilities/default.json      IPC permission grants
     └── src/
         ├── main.rs                    Binary entry point
-        ├── lib.rs                     Tauri Builder setup, plugin registration
+        ├── lib.rs                     Builder, plugins, tray, shortcuts, bridge
         ├── commands.rs                Tauri IPC command handlers
-        ├── models.rs                  Serde data models (CapturedApp, RestoreSummary…)
-        ├── capture.rs                 Window enumeration, filtering, VS Code/browser detection
-        ├── restore.rs                 App launching (platform-specific) + position scheduling
-        └── position.rs                Native window positioning (Win32 / AppleScript / xdotool)
+        ├── models.rs                  Serde data models
+        ├── capture.rs                 Window enumeration and classification
+        ├── restore.rs                 Launching + restore orchestration
+        ├── position.rs                WindowClaimer — one window per app
+        ├── native.rs                  Cross-platform window/process actions
+        ├── win32.rs                   Hand-written Win32 FFI (Windows only)
+        ├── procinfo.rs                Terminal working-directory resolution
+        ├── vscode_state.rs            VS Code workspace path resolution
+        ├── browser.rs                 Browser state model + window correlation
+        └── bridge.rs                  Loopback HTTP server for the extension
 ```
 
 ---
@@ -129,66 +224,97 @@ stash/
 ### Windows
 - [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (MSVC toolchain)
 - WebView2 Runtime (ships with Windows 11; downloadable for Windows 10)
+- Terminal working-directory reading requires a 64-bit build (the default).
 
 ### macOS
 - Xcode Command Line Tools: `xcode-select --install`
-- **Accessibility permission**: On first launch, macOS will prompt to grant Stash access to the Accessibility API (required for x-win to read window URLs and for AppleScript positioning). Grant it in *System Settings → Privacy & Security → Accessibility*.
+- **Accessibility permission**: On first launch macOS prompts to grant Stash
+  access to the Accessibility API (required for window enumeration and
+  AppleScript positioning). Grant it in
+  *System Settings → Privacy & Security → Accessibility*.
 
 ### Linux
 - `libwebkit2gtk-4.1-dev` (Debian/Ubuntu) or equivalent
 - `libayatana-appindicator3-dev` (optional, for tray support)
-- For window positioning: `xdotool` (`apt install xdotool` / `dnf install xdotool`)
-- Note: x-win uses X11; Wayland is supported via XWayland.
+- `xdotool` for window positioning
+- x-win uses X11; Wayland is supported via XWayland.
 
 ---
 
 ## Setup & Running
 
 ```bash
-# 1. Install frontend dependencies
-bun install
-
-# 2. Start the development server (hot-reload frontend + Rust recompile)
-bun tauri dev
-
-# 3. Build a release bundle
-bun tauri build
+bun install          # 1. Install frontend dependencies
+bun tauri dev        # 2. Dev server (hot-reload frontend + Rust recompile)
+bun tauri build      # 3. Release bundle
 ```
 
-The first `tauri dev` will compile all Rust crates (including x-win) which takes a few minutes. Subsequent runs are incremental.
+The first `tauri dev` compiles all Rust crates (including x-win), which takes a
+few minutes. Subsequent runs are incremental.
+
+### Browser tabs
+
+Tab capture needs the companion Chrome extension.
+See **[docs/BROWSER-EXTENSION.md](docs/BROWSER-EXTENSION.md)** for the two-minute
+install and pairing walkthrough. Everything else works without it.
 
 ---
 
-## Running Rust Tests
+## Quality Gates
 
 ```bash
-cd src-tauri
-cargo test
+bun run validate     # all 7 gates in sequence
 ```
 
-Tests cover:
-- Relative ↔ absolute coordinate conversion for 1080p and 4K displays
-- VS Code workspace folder extraction from title strings
-- System noise / browser / VS Code detection logic
-- Launch command argument construction
+1. ESLint · 2. `vue-tsc --noEmit` · 3. Vitest · 4. arch-check ·
+5. `cargo clippy -- -D warnings` · 6. `cargo test` · 7. `vite build`
+
+Individually:
+
+```bash
+bun run lint         bun run typecheck      bun run test
+bun run arch-check   cd src-tauri && cargo test
+```
+
+**arch-check** (`scripts/arch-check.ts`) catches drift between the Rust and
+TypeScript halves:
+
+1. Every `#[tauri::command]` is registered in `generate_handler!`, and vice versa.
+2. Every relative `.vue` import resolves to a real file.
+3. Every type exported from `types.ts` is used somewhere in `src/`.
+4. Every capabilities JSON file parses.
+5. Every registered command is actually invoked from the frontend (with an
+   explicit allowlist for deliberately-unused ones).
+6. Every `mod` declared in `lib.rs` has a source file.
 
 ---
 
 ## Feature Notes
 
-### VS Code Workspace Detection
-Stash parses the VS Code window title using the pattern `"file — workspace — Visual Studio Code"`. If multiple editors are open, each window is captured separately with its own workspace folder. On restore, `code <workspace-path>` opens VS Code directly in that folder.
+### Multiple windows of the same app
+Two VS Code windows, three Chrome windows and two terminals in one workspace all
+restore to their own positions. `WindowClaimer` guarantees exclusivity — see
+*Window Restore* above.
 
-### Browser URL Capture
-Browser URLs are read via the OS accessibility layer (x-win). This requires:
-- **Windows**: no extra steps (uses UI Automation / IAccessible)
-- **macOS**: Accessibility permission (see above)
-- **Linux**: X11 accessibility support; may not work on all distros
+### Window positioning fallback
+Repositioning is best-effort. If an app takes longer than ~12 seconds to show its
+first window, Stash skips positioning for it; the app still launches. If the app
+was already running and reused an existing window, Stash positions that window
+instead of doing nothing.
 
-If URL capture fails, the browser is still launched without a specific URL.
+### Browser memory
+Restored background tabs are **discarded immediately** by the extension — they
+appear in the tab strip but consume no memory until clicked. Reopening a 40-tab
+workspace does not load 40 pages.
 
-### Window Positioning Fallback
-Window repositioning is best-effort. If a launched app takes longer than ~6 seconds to show its first window (e.g. slow startup), Stash will skip repositioning for that app. The app still launches correctly.
+### Incognito
+The extension never captures incognito windows.
 
-### Name Conflicts
-If you save a new workspace with the same name as an existing one, it overwrites the old entry. Choose unique names to avoid this.
+### Global shortcut conflicts
+If another application (or a second copy of Stash) already owns `Ctrl+Shift+S`,
+registration fails and is logged — Stash still starts, and the palette remains
+reachable from the header button.
+
+### Name conflicts
+Saving a workspace with the name of an existing one overwrites it. Choose unique
+names.

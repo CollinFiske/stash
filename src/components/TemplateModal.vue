@@ -19,9 +19,17 @@ const newTag = ref("");
 
 const newPath = ref("");
 const newName = ref("");
-const newType = ref<"regular" | "vscode" | "browser">("regular");
+const newType = ref<"regular" | "vscode" | "browser" | "terminal">("regular");
 const newContext = ref("");
 const newUrl = ref("");
+const newWorkingDir = ref("");
+
+/** Terminal emulators and shells that accept a starting directory. */
+const TERMINALS = [
+  "cmd", "powershell", "pwsh", "wt", "windowsterminal", "conhost",
+  "bash", "zsh", "fish", "alacritty", "wezterm", "kitty", "hyper",
+  "tabby", "mintty", "gnome-terminal", "konsole", "xterm", "iterm",
+];
 
 function inferName(path: string): string {
   const parts = path.replace(/\\/g, "/").split("/");
@@ -30,14 +38,26 @@ function inferName(path: string): string {
 
 function autoDetect() {
   const p = newPath.value.toLowerCase();
+  const stem = inferName(newPath.value).toLowerCase();
   if (p === "code" || p.includes("\\code.exe") || p.includes("code - insiders")) {
     newType.value = "vscode";
   } else if (["chrome", "firefox", "msedge", "brave", "safari", "arc"].some((b) => p.includes(b))) {
     newType.value = "browser";
+  } else if (TERMINALS.includes(stem)) {
+    newType.value = "terminal";
   } else {
     newType.value = "regular";
   }
   if (!newName.value) newName.value = inferName(newPath.value);
+}
+
+async function browseFolder() {
+  try {
+    const selected = await open({ directory: true, multiple: false, title: "Select Starting Directory" });
+    if (typeof selected === "string" && selected) newWorkingDir.value = selected;
+  } catch {
+    // cancelled
+  }
 }
 
 async function browseFile() {
@@ -68,14 +88,17 @@ function addEntry() {
     exe_path: path,
     is_vscode: newType.value === "vscode",
     is_browser: newType.value === "browser",
+    is_terminal: newType.value === "terminal",
     context_path: newType.value === "vscode" ? newContext.value.trim() || null : null,
     target_url: newType.value === "browser" ? newUrl.value.trim() || null : null,
+    working_dir: newType.value === "terminal" ? newWorkingDir.value.trim() || null : null,
   });
   newPath.value = "";
   newName.value = "";
   newType.value = "regular";
   newContext.value = "";
   newUrl.value = "";
+  newWorkingDir.value = "";
 }
 
 function removeEntry(i: number) {
@@ -164,6 +187,7 @@ function handleSave() {
                 <div class="captured-info">
                   <div class="captured-name">{{ entry.name }}</div>
                   <div v-if="entry.context_path" class="captured-sub tmpl-sub">workspace: {{ entry.context_path }}</div>
+                  <div v-else-if="entry.working_dir" class="captured-sub tmpl-sub">cd: {{ entry.working_dir }}</div>
                   <div v-else-if="entry.target_url" class="captured-sub tmpl-sub">{{ entry.target_url }}</div>
                   <div v-else class="captured-sub tmpl-sub" style="opacity:0.5;">{{ entry.exe_path }}</div>
                 </div>
@@ -200,6 +224,7 @@ function handleSave() {
                     <option value="regular">Regular App</option>
                     <option value="vscode">VS Code</option>
                     <option value="browser">Browser</option>
+                    <option value="terminal">Terminal</option>
                   </select>
                 </div>
               </div>
@@ -212,6 +237,14 @@ function handleSave() {
               <div v-if="newType === 'browser'" class="form-group" style="margin-bottom:0;">
                 <label class="form-label add-app-label">URL (optional)</label>
                 <input class="form-input" v-model="newUrl" placeholder="https://github.com/pulls" />
+              </div>
+
+              <div v-if="newType === 'terminal'" class="form-group" style="margin-bottom:0;">
+                <label class="form-label add-app-label">Starting directory (optional)</label>
+                <div class="browse-row">
+                  <input class="form-input" v-model="newWorkingDir" placeholder="C:\Projects\my-app" />
+                  <button class="btn btn-ghost browse-btn" type="button" @click="browseFolder" title="Browse for folder">📂</button>
+                </div>
               </div>
             </div>
             <button class="btn btn-ghost" style="margin-top:10px;" @click="addEntry" :disabled="!newPath.trim()">

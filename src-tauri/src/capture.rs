@@ -1,4 +1,6 @@
+use crate::browser::{self, BrowserSnapshot};
 use crate::models::{CapturedApp, RelativePosition};
+use crate::procinfo;
 use std::collections::HashSet;
 
 // Identifiers checked against the lowercase exe name or path.
@@ -46,11 +48,7 @@ pub struct MonitorInfo {
 /// Returns the index into `monitors`, or 0 as a fallback.
 fn monitor_for_pos(monitors: &[MonitorInfo], wx: i32, wy: i32) -> u32 {
     for (i, m) in monitors.iter().enumerate() {
-        if wx >= m.x
-            && wx < m.x + m.width as i32
-            && wy >= m.y
-            && wy < m.y + m.height as i32
-        {
+        if wx >= m.x && wx < m.x + m.width as i32 && wy >= m.y && wy < m.y + m.height as i32 {
             return i as u32;
         }
     }
@@ -128,19 +126,26 @@ pub fn extract_vscode_workspace(title: &str) -> Option<String> {
 
 /// Capture all visible user-facing windows and return their data with
 /// positions expressed as fractions of the monitor they reside on.
+///
 /// `monitors` provides geometry for all available monitors (primary first).
+/// `browser_state` is the Stash extension's view of the browser, when connected;
+/// each browser window found on screen is matched to it by geometry so the tab
+/// list travels with the snapshot.
 pub fn capture_windows(
     screen_width: u32,
     screen_height: u32,
     monitors: &[MonitorInfo],
+    browser_state: Option<&BrowserSnapshot>,
 ) -> Result<Vec<CapturedApp>, String> {
-    let windows =
-        x_win::get_open_windows().map_err(|e| format!("x-win capture failed: {e}"))?;
+    let windows = x_win::get_open_windows().map_err(|e| format!("x-win capture failed: {e}"))?;
 
     let mut captured: Vec<CapturedApp> = Vec::new();
     // Deduplicate same app+title pairs (e.g. multiple shell chrome processes
     // that map to the same visible window).
     let mut seen: HashSet<String> = HashSet::new();
+    // Browser windows already paired with an on-screen window, so two Chrome
+    // windows never claim the same tab list.
+    let mut claimed_browser_windows: Vec<usize> = Vec::new();
 
     for win in windows {
         let title = win.title.trim().to_string();
@@ -150,6 +155,7 @@ pub fn capture_windows(
 
         let name = win.info.name.clone();
         let exe_path = win.info.path.clone();
+        let pid = win.info.process_id;
 
         // Skip Stash itself — users don't need the manager in their snapshots.
         if is_self_app(&name, &exe_path) {
@@ -163,19 +169,55 @@ pub fn capture_windows(
         seen.insert(dedup_key);
 
         let vscode = is_vscode(&name, &exe_path);
-        let browser = is_browser(&name, &exe_path);
+        let browser_app = is_browser(&name, &exe_path);
+        let terminal = !vscode && !browser_app && procinfo::is_terminal(&name, &exe_path);
 
         let context_path = if vscode {
             extract_vscode_workspace(&title)
+                .and_then(|name| crate::vscode_state::resolve_workspace_path(&name, &exe_path))
         } else {
             None
         };
 
-        let target_url: Option<String> = None;
+        // Terminals remember the directory their shell was working in, so they
+        // reopen where the user left off instead of at the shell's default.
+        let working_dir = if terminal {
+            procinfo::terminal_cwd(pid)
+        } else {
+            None
+        };
 
         let p = &win.position;
         let wx = p.x;
         let wy = p.y;
+
+        // Pair this window with the extension's view of the same browser window.
+        let browser_window = if browser_app {
+            browser_state.and_then(|state| {
+                let idx = browser::correlate_window(
+                    &state.windows,
+                    &claimed_browser_windows,
+                    wx,
+                    wy,
+                    p.width,
+                    p.height,
+                )?;
+                claimed_browser_windows.push(idx);
+                Some(state.windows[idx].clone())
+            })
+        } else {
+            None
+        };
+
+        // When the extension supplied tabs, keep the active tab's URL as the
+        // fallback for restoring without the extension installed.
+        let target_url: Option<String> = browser_window.as_ref().and_then(|bw| {
+            bw.tabs
+                .iter()
+                .find(|t| t.active)
+                .or_else(|| bw.tabs.first())
+                .map(|t| t.url.clone())
+        });
 
         // Determine which monitor the window lives on.
         let monitor_index = if monitors.is_empty() {
@@ -187,7 +229,11 @@ pub fn capture_windows(
         // Compute position relative to the monitor it belongs to.
         let relative_position = if !monitors.is_empty() {
             let idx = monitor_index as usize;
-            let m = if idx < monitors.len() { &monitors[idx] } else { &monitors[0] };
+            let m = if idx < monitors.len() {
+                &monitors[idx]
+            } else {
+                &monitors[0]
+            };
             let mw = m.width.max(1) as f64;
             let mh = m.height.max(1) as f64;
             RelativePosition {
@@ -213,11 +259,14 @@ pub fn capture_windows(
             exe_path,
             title,
             is_vscode: vscode,
-            is_browser: browser,
+            is_browser: browser_app,
+            is_terminal: terminal,
             context_path,
             target_url,
+            working_dir,
             relative_position,
             monitor_index,
+            browser_window,
         });
     }
 
@@ -288,15 +337,27 @@ mod tests {
 
     #[test]
     fn vscode_detection() {
-        assert!(is_vscode("Code", "C:\\Users\\user\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe"));
+        assert!(is_vscode(
+            "Code",
+            "C:\\Users\\user\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe"
+        ));
         assert!(is_vscode("code", "/usr/share/code/code"));
-        assert!(!is_vscode("chrome", "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"));
+        assert!(!is_vscode(
+            "chrome",
+            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+        ));
     }
 
     #[test]
     fn browser_detection() {
-        assert!(is_browser("chrome", "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"));
-        assert!(is_browser("msedge", "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"));
+        assert!(is_browser(
+            "chrome",
+            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+        ));
+        assert!(is_browser(
+            "msedge",
+            "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
+        ));
         assert!(is_browser("firefox", "/usr/bin/firefox"));
         assert!(!is_browser("Code", "C:\\Code.exe"));
     }
@@ -304,8 +365,18 @@ mod tests {
     #[test]
     fn monitor_detection() {
         let monitors = vec![
-            MonitorInfo { x: 0, y: 0, width: 1920, height: 1080 },
-            MonitorInfo { x: 1920, y: 0, width: 2560, height: 1440 },
+            MonitorInfo {
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            },
+            MonitorInfo {
+                x: 1920,
+                y: 0,
+                width: 2560,
+                height: 1440,
+            },
         ];
         assert_eq!(monitor_for_pos(&monitors, 0, 0), 0);
         assert_eq!(monitor_for_pos(&monitors, 960, 540), 0);
@@ -313,5 +384,22 @@ mod tests {
         assert_eq!(monitor_for_pos(&monitors, 2500, 700), 1);
         // out of bounds falls back to 0
         assert_eq!(monitor_for_pos(&monitors, -100, 0), 0);
+    }
+
+    #[test]
+    fn terminals_are_classified_separately_from_editors() {
+        // A terminal must not be mistaken for VS Code or a browser.
+        assert!(procinfo::is_terminal(
+            "WindowsTerminal",
+            "C:\\Program Files\\WindowsTerminal.exe"
+        ));
+        assert!(!is_vscode(
+            "WindowsTerminal",
+            "C:\\Program Files\\WindowsTerminal.exe"
+        ));
+        assert!(!is_browser(
+            "WindowsTerminal",
+            "C:\\Program Files\\WindowsTerminal.exe"
+        ));
     }
 }
