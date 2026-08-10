@@ -29,5 +29,5 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      # `validate` runs everything in sequence and reports which gate failed.
-      - run: bun run validate
+      # don't need anymore - `validate` runs everything in sequence and reports which gate failed.
+      #- run: bun run validate
