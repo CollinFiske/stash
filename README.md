@@ -10,6 +10,28 @@ file in your OS app-data folder.
 
 ---
 
+## Download
+
+**[Latest release →](https://github.com/CollinFiske/stash/releases/latest)**
+
+| Platform | File | Notes |
+|---|---|---|
+| Windows | `Stash_x64-setup.exe` | Per-user install, no admin required |
+| Linux | `Stash_amd64.AppImage` | Runs on any distro — `chmod +x` it first |
+| Linux | `.deb` / `.rpm` | For Debian/Ubuntu and Fedora/RHEL |
+
+macOS is not built yet: unsigned macOS apps are blocked by Gatekeeper, and
+notarisation requires a paid Apple Developer account. Building from source works.
+
+> **Windows will warn you.** Stash is not code-signed, so you will see
+> *"Windows protected your PC"*. Click **More info → Run anyway**. The source is
+> right here if you would rather read it or build it yourself.
+
+Browser-tab capture additionally needs the companion extension —
+see **[docs/BROWSER-EXTENSION.md](docs/BROWSER-EXTENSION.md)**.
+
+---
+
 ## What it captures
 
 | | Without help from the app | What Stash captures |
@@ -318,3 +340,35 @@ reachable from the header button.
 ### Name conflicts
 Saving a workspace with the name of an existing one overwrites it. Choose unique
 names.
+
+---
+
+## Releasing
+
+Releases are cut by pushing a tag. `.github/workflows/release.yml` then builds on
+both platforms in parallel and collects the installers into a **draft** GitHub
+Release for review.
+
+```bash
+# bump the version in package.json, src-tauri/tauri.conf.json and src-tauri/Cargo.toml
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Tauri cannot cross-compile — Windows installers must be built on Windows and Linux
+packages on Linux — which is why this runs as a CI matrix rather than locally. The
+Linux job pins `ubuntu-22.04` deliberately: binaries link against the build machine's
+glibc, so building on a newer runner produces packages that will not start on older
+distributions.
+
+Building locally with `bun tauri build` produces artifacts for **your** platform only,
+under `src-tauri/target/release/bundle/`.
+
+## Contributing
+
+Bug reports and pull requests are welcome. Run `bun run validate` before opening a PR —
+it runs the same seven gates CI does.
+
+## License
+
+MIT © 2026 Collin Fiske. See [LICENSE](LICENSE).

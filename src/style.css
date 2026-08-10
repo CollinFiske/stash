@@ -438,6 +438,10 @@ h2 {
   justify-content: flex-end;
   gap: 10px;
   flex-shrink: 0; /* footer always visible regardless of body content height */
+  /* The snapshot footer carries four buttons and very nearly fills the modal.
+     Wrapping keeps them reachable if a wider font or larger text size pushes
+     them past the edge. */
+  flex-wrap: wrap;
 }
 
 /* ── Form elements ───────────────────────────────────────────────────────── */

@@ -66,6 +66,11 @@
              font-family: ui-monospace, Consolas, monospace; font-size: 0.85em; color: var(--text); }
       h2 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
            color: var(--muted); margin-bottom: 10px; }
+      .check-row { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+      .check-row input { margin-top: 3px; width: 15px; height: 15px; accent-color: var(--accent); }
+      .check-row strong { display: block; font-size: 0.88rem; font-weight: 600; }
+      .check-row em { display: block; font-style: normal; font-size: 0.78rem;
+                      color: var(--muted); margin-top: 3px; line-height: 1.45; }
     </style>
   </head>
   <body>
@@ -94,6 +99,18 @@
           <button id="test">Test connection</button>
         </div>
         <div class="status" id="status"></div>
+      </div>
+
+      <div class="card">
+        <h2>Restoring</h2>
+        <label class="check-row" for="discard">
+          <input id="discard" type="checkbox" checked />
+          <span>
+            <strong>Unload restored background tabs</strong>
+            <em>Reclaims memory after a workspace is restored. Tabs reload when you
+            click them. Turn off to keep every restored tab loaded.</em>
+          </span>
+        </label>
       </div>
 
       <div class="card">

@@ -23,6 +23,9 @@ export default tseslint.config(
     languageOptions: {
       globals: {
         ...globals.browser,
+        // Injected by Vite's `define` from package.json. TypeScript learns about
+        // it from src/vite-env.d.ts, but ESLint's no-undef does not read .d.ts.
+        __APP_VERSION__: "readonly",
       },
       parserOptions: {
         // Let vue-eslint-parser handle .vue files; use TS parser for <script>

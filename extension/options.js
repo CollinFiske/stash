@@ -1,6 +1,12 @@
 const $ = (id) => document.getElementById(id);
 
-const DEFAULTS = { host: "127.0.0.1", port: 8787, token: "", enabled: true };
+const DEFAULTS = {
+  host: "127.0.0.1",
+  port: 8787,
+  token: "",
+  enabled: true,
+  discardRestoredTabs: true,
+};
 
 function setStatus(message, kind) {
   const el = $("status");
@@ -13,7 +19,14 @@ async function load() {
   $("token").value = cfg.token || "";
   $("host").value = cfg.host || DEFAULTS.host;
   $("port").value = cfg.port || DEFAULTS.port;
+  $("discard").checked = cfg.discardRestoredTabs !== false;
 }
+
+// Applies immediately — it only affects the next restore, so there is nothing
+// to save alongside the connection settings.
+$("discard").addEventListener("change", async () => {
+  await chrome.storage.local.set({ discardRestoredTabs: $("discard").checked });
+});
 
 async function save() {
   const token = $("token").value.trim();

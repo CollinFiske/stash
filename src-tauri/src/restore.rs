@@ -40,6 +40,8 @@ pub fn restore_workspace(
     let extension_ready = bridge.as_ref().map(|b| b.connected()).unwrap_or(false);
     let mut browser_windows: Vec<BrowserWindowState> = Vec::new();
     let mut launchable: Vec<CapturedApp> = Vec::new();
+    // Distinct browser executables the extension is expected to rebuild.
+    let mut extension_browsers: Vec<CapturedApp> = Vec::new();
 
     for app in apps {
         match (&app.browser_window, extension_ready) {
@@ -47,6 +49,12 @@ pub fn restore_workspace(
             // intact, which no amount of command-line launching can do.
             (Some(state), true) => {
                 browser_windows.push(state.clone());
+                if !extension_browsers
+                    .iter()
+                    .any(|b| b.exe_path.eq_ignore_ascii_case(&app.exe_path))
+                {
+                    extension_browsers.push(app.clone());
+                }
                 results.push(RestoreResult {
                     app_name: format!("{} ({} tabs)", app.name, state.tabs.len()),
                     success: true,
@@ -54,7 +62,7 @@ pub fn restore_workspace(
                     positioned: true,
                 });
             }
-            // No extension: fall back to launching the browser on one URL.
+            // No extension: launch the browser directly on its saved tabs.
             _ => launchable.push(app),
         }
     }
@@ -65,6 +73,20 @@ pub fn restore_workspace(
             id: format!("restore-{}", now_millis()),
             windows: browser_windows,
         });
+
+        // The extension only runs while its browser does. If the browser has no
+        // window open, nothing will poll the queue and the restore sits there
+        // until the user opens the browser by hand — which looked exactly like
+        // "my tabs didn't come back".
+        for browser in &extension_browsers {
+            if !has_open_window(&browser.exe_path) {
+                let _ = wake_browser(&browser.exe_path);
+            }
+        }
+
+        // Safety net: if the extension never drains the queue, fall back to
+        // opening the tabs on the command line so the workspace still restores.
+        spawn_restore_watchdog(bridge.clone(), extension_browsers);
     }
 
     // ── Record which windows already existed, then launch ────────────────────
@@ -150,6 +172,93 @@ fn absolute_bounds(
     )
 }
 
+/// Browsers that accept Chromium's command-line flags.
+const CHROMIUM_STEMS: &[&str] = &[
+    "chrome", "msedge", "brave", "vivaldi", "opera", "chromium", "arc", "thorium",
+];
+
+fn is_chromium(exe_path: &str) -> bool {
+    CHROMIUM_STEMS.contains(&procinfo::exe_stem(exe_path).as_str())
+}
+
+/// True when this executable currently has at least one window on screen.
+fn has_open_window(exe_path: &str) -> bool {
+    let target = exe_path.to_lowercase();
+    x_win::get_open_windows()
+        .map(|windows| {
+            windows
+                .iter()
+                .any(|w| w.info.path.to_lowercase() == target)
+        })
+        .unwrap_or(false)
+}
+
+/// Start a browser purely so its extension comes alive and can do the restore.
+///
+/// Chromium's `--no-startup-window` boots the browser and loads extensions
+/// without opening a window, so the user does not get a stray New Tab page
+/// alongside the windows the extension is about to rebuild.
+fn wake_browser(exe_path: &str) -> Result<(), String> {
+    let mut cmd = std::process::Command::new(exe_path);
+    if is_chromium(exe_path) {
+        cmd.arg("--no-startup-window");
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+/// How long to give the extension before assuming it will not respond.
+const WATCHDOG_DELAY: Duration = Duration::from_secs(20);
+
+/// Watch the bridge queue and recover if the extension never acts.
+///
+/// A queued restore that is never drained means the extension is not running,
+/// is disabled, or is not paired. Rather than leave the user with a browser that
+/// never came back, reopen the tabs on the command line — tab groups are lost,
+/// but the workspace is restored.
+fn spawn_restore_watchdog(bridge: Bridge, browsers: Vec<CapturedApp>) {
+    std::thread::spawn(move || {
+        std::thread::sleep(WATCHDOG_DELAY);
+
+        // Claim the queue rather than merely inspecting it. Checking and then
+        // launching would leave a window where the extension drains the command
+        // just after the check, and the workspace would be restored twice.
+        // Claiming makes the two paths mutually exclusive.
+        if bridge.claim_pending() == 0 {
+            return; // the extension handled it
+        }
+
+        for browser in &browsers {
+            let _ = platform_launch(browser);
+        }
+    });
+}
+
+/// Every restorable tab URL saved for a browser window, capped so the command
+/// line stays within the OS limit (~32 KB on Windows).
+fn browser_tab_urls(app: &CapturedApp) -> Vec<String> {
+    const MAX_URLS: usize = 40;
+    let Some(state) = &app.browser_window else {
+        return app.target_url.iter().cloned().collect();
+    };
+    let urls: Vec<String> = state
+        .tabs
+        .iter()
+        .map(|t| t.url.clone())
+        .filter(|u| !u.is_empty() && !u.starts_with("chrome://newtab"))
+        .take(MAX_URLS)
+        .collect();
+    if urls.is_empty() {
+        app.target_url.iter().cloned().collect()
+    } else {
+        urls
+    }
+}
+
 fn now_millis() -> u128 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -203,9 +312,9 @@ fn platform_launch(app: &CapturedApp) -> Result<Option<u32>, String> {
                 }
             }
         } else if app.is_browser {
-            if let Some(url) = &app.target_url {
-                cmd.arg(url);
-            }
+            // Every saved tab, not just the one that happened to be focused —
+            // browsers open each URL as its own tab in a single new window.
+            cmd.args(browser_tab_urls(app));
         }
 
         return cmd
@@ -226,9 +335,7 @@ fn platform_launch(app: &CapturedApp) -> Result<Option<u32>, String> {
             cmd.arg(ctx);
         }
     } else if app.is_browser {
-        if let Some(url) = &app.target_url {
-            cmd.arg(url);
-        }
+        cmd.args(browser_tab_urls(app));
     } else if app.is_terminal {
         if let Some(dir) = app.working_dir.as_deref() {
             if let Some(args) = procinfo::terminal_launch_args(&app.exe_path, dir) {
@@ -267,9 +374,12 @@ fn platform_launch(app: &CapturedApp) -> Result<Option<u32>, String> {
     }
 
     if app.is_browser {
-        if let Some(url) = &app.target_url {
+        let urls = browser_tab_urls(app);
+        if !urls.is_empty() {
+            // -a targets the captured browser so tabs do not land in the default one.
             return Command::new("open")
-                .arg(url)
+                .args(["-a", &app.exe_path])
+                .args(&urls)
                 .spawn()
                 .map(|_| None)
                 .map_err(|e| e.to_string());
@@ -303,9 +413,7 @@ fn platform_launch(app: &CapturedApp) -> Result<Option<u32>, String> {
             }
         }
     } else if app.is_browser {
-        if let Some(url) = &app.target_url {
-            cmd.arg(url);
-        }
+        cmd.args(browser_tab_urls(app));
     }
 
     cmd.spawn()
@@ -430,6 +538,86 @@ mod tests {
             absolute_bounds(&app, &monitors, 1920, 1080),
             (0, 0, 1920, 1080)
         );
+    }
+
+    fn browser_with_tabs(urls: &[&str], focused: Option<&str>) -> CapturedApp {
+        let mut app = app_at(
+            RelativePosition { x: 0.0, y: 0.0, w: 1.0, h: 1.0 },
+            0,
+        );
+        app.is_browser = true;
+        app.exe_path = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe".into();
+        app.target_url = focused.map(|s| s.to_string());
+        app.browser_window = Some(crate::browser::BrowserWindowState {
+            tabs: urls
+                .iter()
+                .map(|u| crate::browser::BrowserTab {
+                    url: (*u).to_string(),
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        });
+        app
+    }
+
+    #[test]
+    fn fallback_opens_every_saved_tab_not_just_the_focused_one() {
+        // Without the extension the browser is launched from the command line.
+        // Passing only `target_url` silently dropped every other tab.
+        let app = browser_with_tabs(
+            &["https://a.test/", "https://b.test/", "https://c.test/"],
+            Some("https://b.test/"),
+        );
+        assert_eq!(
+            browser_tab_urls(&app),
+            vec![
+                "https://a.test/".to_string(),
+                "https://b.test/".to_string(),
+                "https://c.test/".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn fallback_uses_target_url_when_no_tabs_were_captured() {
+        // A snapshot taken without the extension has no tab list at all.
+        let mut app = app_at(RelativePosition { x: 0.0, y: 0.0, w: 1.0, h: 1.0 }, 0);
+        app.is_browser = true;
+        app.target_url = Some("https://only.test/".into());
+        assert_eq!(browser_tab_urls(&app), vec!["https://only.test/".to_string()]);
+    }
+
+    #[test]
+    fn fallback_is_empty_when_there_is_nothing_to_open() {
+        let mut app = app_at(RelativePosition { x: 0.0, y: 0.0, w: 1.0, h: 1.0 }, 0);
+        app.is_browser = true;
+        assert!(browser_tab_urls(&app).is_empty());
+    }
+
+    #[test]
+    fn fallback_skips_blank_and_newtab_urls() {
+        let app = browser_with_tabs(&["", "chrome://newtab/", "https://real.test/"], None);
+        assert_eq!(browser_tab_urls(&app), vec!["https://real.test/".to_string()]);
+    }
+
+    #[test]
+    fn fallback_caps_the_command_line_length() {
+        let many: Vec<String> = (0..100).map(|i| format!("https://n{i}.test/")).collect();
+        let refs: Vec<&str> = many.iter().map(|s| s.as_str()).collect();
+        let app = browser_with_tabs(&refs, None);
+        // A 100-tab window must not blow past the OS command-line limit.
+        assert_eq!(browser_tab_urls(&app).len(), 40);
+    }
+
+    #[test]
+    fn chromium_browsers_are_recognised_for_flag_support() {
+        assert!(is_chromium("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"));
+        assert!(is_chromium("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"));
+        assert!(is_chromium("/usr/bin/brave"));
+        // Firefox takes none of Chromium's flags.
+        assert!(!is_chromium("/usr/bin/firefox"));
+        assert!(!is_chromium("C:\\Code.exe"));
     }
 
     #[test]

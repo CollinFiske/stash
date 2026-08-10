@@ -10,7 +10,7 @@
 > still open. Written to be pasted wholesale as context into another chat/LLM session.
 > Everything below was derived by reading the actual source tree, not from memory.
 >
-> **Snapshot date:** 2026-07-26 · **Repo:** `c:\Users\cfisk\OneDrive\Documents\prjs\stash`
+> **Snapshot date:** 2026-07-26 · **Repo:** `<path-to-stash-repo>`
 > **Branch:** `main` · **Head:** `cadfec8` · **Declared version:** `0.1.0` (UI About page says "Version 1.0")
 
 ---
@@ -235,7 +235,7 @@ where things go.*
 
 ### 5.13 Static pages
 About / FAQ / Contact, reachable from a hamburger menu, rendered by a `currentPage` ref.
-The Contact page email is still the literal placeholder `placeholder@gmail.com`.
+The Contact page links to GitHub Issues, Discussions and the repo — no email is published.
 
 ### 5.14 Feedback & polish
 Toasts (success/error, 3.5 s, or 5.5 s when carrying an Undo action), spinners on
@@ -855,9 +855,9 @@ grew across three separate commits as this was cleaned up.
 22. **`:root` is capped at `max-width: 900px`** in `style.css` while the default window is
     960 px wide — content is centered and letterboxed, and there is commented-out
     experimental CSS left in the file.
-23. **Contact page still shows `placeholder@gmail.com`.**
-24. **Version mismatch** — `package.json`/`Cargo.toml`/`tauri.conf.json` all say `0.1.0`;
-    the About page says "Version 1.0".
+23. ~~Contact page shows `placeholder@gmail.com`.~~ **Fixed** — now links to GitHub Issues.
+24. ~~Version mismatch across the manifests and the About page.~~ **Fixed** — all three
+    manifests say `1.0.0` and the About page reads it from `package.json` at build time.
 25. **`csp: null`** in `tauri.conf.json` — no content-security policy is enforced.
 26. **`write_file` / `read_file` are unrestricted arbitrary-path filesystem commands**
     exposed to the webview. Safe today because the paths come from native dialogs, but

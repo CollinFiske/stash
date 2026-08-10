@@ -27,7 +27,7 @@ With it installed, Stash can:
    repository:
 
    ```
-   c:\Users\cfisk\OneDrive\Documents\prjs\stash\extension
+   <path-to-stash-repo>\extension
    ```
 
    Select the **folder itself** — not a file inside it.
@@ -87,8 +87,17 @@ single URL, Stash hands the whole window description to the extension, which
 rebuilds it: correct window position and size, tabs in their original order,
 pinned tabs still pinned, and tab groups restored with their names and colours.
 
-Background tabs are **discarded immediately** — they appear in the tab strip but
-consume no memory until you click one.
+Background tabs then **load and are unloaded again** to reclaim memory. They stay
+in the tab strip showing their title and favicon, and reload when you click one.
+
+> **Why they load first.** Chrome only remembers where a tab points once its
+> navigation has *committed*. Unloading a tab before that throws the URL away and
+> the tab comes back blank. So each restored tab is allowed to commit, and only
+> then unloaded. Restoring a large workspace therefore causes a brief load burst
+> before memory settles — that is the cost of the tabs coming back correctly.
+>
+> To skip it entirely, turn off **Unload restored background tabs** in the
+> extension's settings. Tabs then stay loaded and ready.
 
 ### Closing tabs
 
@@ -168,6 +177,17 @@ it again from Stash → **Browser** and re-save.
 The desktop app is not running, or a firewall is blocking loopback connections
 for Chrome. Stash must be open for the bridge to answer.
 
+**Launching a workspace opens everything except the browser**
+Fixed. The extension is the only thing that can rebuild browser windows, and it
+only runs while its browser runs — so with the browser closed, the restore sat in
+the queue until the browser was opened by hand. Stash now starts the browser
+itself (with `--no-startup-window`, so no stray New Tab page appears) and the
+extension picks the work up from there.
+
+If the extension still does not respond within 20 seconds, Stash reopens the tabs
+from the command line instead. Tab groups are lost that way, but the workspace
+comes back rather than silently doing nothing.
+
 **Tabs restore but tab groups do not**
 `chrome.tabGroups` needs Chrome 89+. On older builds tabs still restore in the
 right order and window; only the coloured group pills are lost.
@@ -175,6 +195,13 @@ right order and window; only the coloured group pills are lost.
 **Some tabs are missing after a restore**
 `devtools://` and `view-source:` tabs are filtered out at capture time — Chrome
 does not allow an extension to recreate them.
+
+**Restored tabs open as blank New Tab pages**
+Fixed in the current version — background tabs were being unloaded before their
+navigation committed, which discarded the URL. Reload the extension at
+`chrome://extensions` (the ↻ icon on the Stash Bridge card) to pick up the fix.
+Snapshots taken before the fix are unaffected: the URLs were always stored
+correctly, only the restore was losing them.
 
 **The extension stops syncing after Chrome has been idle for a long time**
 Click the extension icon and press **Sync now**; this also restarts the loop.

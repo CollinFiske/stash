@@ -132,10 +132,10 @@ mod tests {
     #[test]
     fn decode_windows_drive_uri() {
         if cfg!(target_os = "windows") {
-            let decoded = decode_file_uri("file:///c%3A/Users/cfisk/OneDrive/Documents/prjs/stash");
+            let decoded = decode_file_uri("file:///c%3A/Users/dev/Documents/prjs/stash");
             assert_eq!(
                 decoded,
-                Some("C:\\Users\\cfisk\\OneDrive\\Documents\\prjs\\stash".to_string())
+                Some("C:\\Users\\dev\\Documents\\prjs\\stash".to_string())
             );
         }
     }
@@ -143,8 +143,8 @@ mod tests {
     #[test]
     fn decode_uri_with_spaces() {
         if cfg!(target_os = "windows") {
-            let decoded = decode_file_uri("file:///c%3A/Users/cfisk/My%20Project");
-            assert_eq!(decoded, Some("C:\\Users\\cfisk\\My Project".to_string()));
+            let decoded = decode_file_uri("file:///c%3A/Users/dev/My%20Project");
+            assert_eq!(decoded, Some("C:\\Users\\dev\\My Project".to_string()));
         }
     }
 

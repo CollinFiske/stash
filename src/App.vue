@@ -438,6 +438,42 @@ async function handleSave(name: string, apps: CapturedApp[]) {
   }
 }
 
+/**
+ * Save a fresh capture as a reusable template rather than a workspace.
+ *
+ * Templates carry no geometry — `autoLayout` assigns each entry a grid slot at
+ * launch time — so the captured rectangles are deliberately dropped here.
+ */
+async function handleSaveAsTemplate(name: string, apps: CapturedApp[]) {
+  const template: ProjectTemplate = {
+    name,
+    created_at: new Date().toISOString(),
+    entries: apps.map((a) => ({
+      name: a.name,
+      exe_path: a.exe_path,
+      is_vscode: a.is_vscode,
+      is_browser: a.is_browser,
+      is_terminal: a.is_terminal ?? false,
+      context_path: a.context_path,
+      target_url: a.target_url,
+      working_dir: a.working_dir ?? null,
+    })),
+  };
+  try {
+    await saveTemplate(template);
+    showSnapshot.value = false;
+    capturedApps.value = [];
+    showToast(`Template "${name}" saved`, "success");
+    templates.value = await loadTemplates();
+    if (!templateOrder.value.includes(name)) {
+      templateOrder.value = [...templateOrder.value, name];
+      await saveTemplateOrder(templateOrder.value);
+    }
+  } catch (err) {
+    showToast(`Save failed: ${String(err)}`, "error");
+  }
+}
+
 function cancelSnapshot() {
   showSnapshot.value = false;
   capturedApps.value = [];
@@ -1064,6 +1100,7 @@ function handlePaletteLaunchTemplate(name: string) {
         :apps="capturedApps"
         :loading="capturingLoading"
         @save="handleSave"
+        @save-template="handleSaveAsTemplate"
         @cancel="cancelSnapshot"
       />
     </transition>

@@ -11,6 +11,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   save: [name: string, apps: CapturedApp[]];
+  "save-template": [name: string, apps: CapturedApp[]];
   cancel: [];
 }>();
 
@@ -139,9 +140,24 @@ function appBadge(app: CapturedApp): string | null {
   return null;
 }
 
+const canSave = computed(() => !!trimmed.value && editableApps.value.length > 0);
+
 function handleSave() {
-  if (trimmed.value && editableApps.value.length > 0) {
+  if (canSave.value) {
     emit("save", trimmed.value, editableApps.value);
+  }
+}
+
+/**
+ * Save the same capture as a reusable template instead of a workspace.
+ *
+ * The difference is what happens to the geometry: a workspace keeps the exact
+ * rectangle each window occupied, while a template throws it away and lays the
+ * apps out on a generated grid at launch time.
+ */
+function handleSaveAsTemplate() {
+  if (canSave.value) {
+    emit("save-template", trimmed.value, editableApps.value);
   }
 }
 </script>
@@ -273,9 +289,18 @@ function handleSave() {
             {{ editMode ? "Done Editing" : "Edit" }}
           </button>
           <button
+            class="btn btn-template-primary"
+            @click="handleSaveAsTemplate"
+            :disabled="loading || !canSave"
+            title="Save these apps as a reusable template — window positions are replaced by an auto-generated grid"
+          >
+            Save as Template
+          </button>
+          <button
             class="btn btn-primary"
             @click="handleSave"
-            :disabled="loading || !trimmed || editableApps.length === 0"
+            :disabled="loading || !canSave"
+            title="Save this capture with the exact window positions"
           >
             <span v-if="loading" class="spinner" style="width:12px;height:12px;"></span>
             Save Workspace

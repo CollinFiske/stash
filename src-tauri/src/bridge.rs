@@ -155,6 +155,15 @@ impl Bridge {
             .unwrap_or_default()
     }
 
+    /// Take ownership of everything queued, so a caller can handle the work
+    /// itself and be certain the extension will not also act on it.
+    ///
+    /// Returns how many commands were claimed — zero means the extension got
+    /// there first and no fallback is needed.
+    pub fn claim_pending(&self) -> usize {
+        self.drain_commands().len()
+    }
+
     /// Start the listener on a background thread. Returns an error if the port
     /// is already taken (usually a second copy of Stash).
     pub fn start(&self) -> Result<(), String> {
@@ -456,6 +465,32 @@ mod tests {
         assert_eq!(drained.len(), 1);
         // Draining is destructive — a second poll returns nothing.
         assert!(bridge.drain_commands().is_empty());
+    }
+
+    #[test]
+    fn claim_pending_takes_the_queue_exactly_once() {
+        let bridge = Bridge::new("t".into());
+        bridge.enqueue(BridgeCommand::Restore {
+            id: "r".into(),
+            windows: vec![],
+        });
+
+        // The restore watchdog claims the work so the extension cannot also run
+        // it — otherwise the workspace would be restored twice.
+        assert_eq!(bridge.claim_pending(), 1);
+        assert_eq!(bridge.claim_pending(), 0);
+        assert!(bridge.drain_commands().is_empty());
+    }
+
+    #[test]
+    fn claim_pending_reports_nothing_when_the_extension_already_drained() {
+        let bridge = Bridge::new("t".into());
+        bridge.enqueue(BridgeCommand::Close {
+            id: "c".into(),
+            window_ids: vec![1],
+        });
+        let _ = bridge.drain_commands(); // extension polled first
+        assert_eq!(bridge.claim_pending(), 0);
     }
 
     #[test]

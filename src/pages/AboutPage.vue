@@ -1,9 +1,14 @@
+<script setup lang="ts">
+// Injected from package.json at build time so this can never drift again.
+const version = __APP_VERSION__;
+</script>
+
 <template>
   <div class="page-container">
     <div class="page-hero">
       <div class="page-hero-logo">📦</div>
       <h1 class="page-h1">Stash</h1>
-      <p class="page-version">Version 1.0</p>
+      <p class="page-version">Version {{ version }}</p>
     </div>
 
     <p class="page-desc">

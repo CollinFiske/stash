@@ -18,6 +18,11 @@ const DEFAULTS = {
   port: 8787,
   token: "",
   enabled: true,
+  /**
+   * Unload restored background tabs once they have loaded, to reclaim memory.
+   * Turn off to leave every restored tab loaded and ready.
+   */
+  discardRestoredTabs: true,
 };
 
 /** How often to poll Stash for queued commands. */
@@ -170,11 +175,11 @@ async function pushState(cfg) {
 /**
  * Rebuild browser windows from a saved snapshot.
  *
- * Restored background tabs are discarded immediately after creation. Stash
- * exists to free memory, so reopening a 40-tab workspace must not load 40 pages
- * at once — Chrome reloads each one when it is first focused.
+ * Background tabs are discarded to keep a restored workspace cheap — but only
+ * *after* each tab's navigation has committed. See [`waitForCommit`] for why
+ * that ordering is not optional.
  */
-async function restoreWindows(windowStates) {
+async function restoreWindows(windowStates, cfg) {
   let restored = 0;
 
   for (const ws of windowStates || []) {
@@ -196,19 +201,23 @@ async function restoreWindows(windowStates) {
     const windowId = created.id;
     const tabIds = [created.tabs[0].id];
 
+    // Every tab is created unpinned and pinned afterwards. Creating a tab with
+    // `pinned: true` makes Chrome move it into the pinned strip immediately,
+    // which shifts every index after it and scrambles the restored tab order.
     for (let i = 1; i < tabs.length; i++) {
       const t = await chrome.tabs.create({
         windowId,
         url: tabs[i].url,
         index: i,
-        pinned: !!tabs[i].pinned,
         active: false,
       });
       tabIds.push(t.id);
     }
 
-    if (tabs[0].pinned) {
-      await chrome.tabs.update(tabIds[0], { pinned: true }).catch(() => {});
+    // Pin left-to-right so the pinned tabs keep their relative order.
+    for (let i = 0; i < tabs.length; i++) {
+      if (!tabs[i].pinned) continue;
+      await chrome.tabs.update(tabIds[i], { pinned: true }).catch(() => {});
     }
 
     await regroupTabs(windowId, tabs, tabIds, ws.groups || []);
@@ -219,12 +228,56 @@ async function restoreWindows(windowStates) {
     }
 
     await chrome.tabs.update(tabIds[activeIndex], { active: true }).catch(() => {});
-    await discardInactiveTabs(tabIds, tabIds[activeIndex]);
+
+    if (cfg?.discardRestoredTabs !== false) {
+      await discardInactiveTabs(tabIds, tabIds[activeIndex]);
+    }
 
     restored++;
   }
 
   return restored;
+}
+
+/**
+ * Resolve once `tabId` has *committed* its navigation, or the timeout expires.
+ *
+ * `chrome.tabs.create({url})` resolves as soon as the tab object exists — long
+ * before the page is fetched. Until the navigation commits, Chrome reports the
+ * target in `tab.pendingUrl` and leaves `tab.url` empty, and the tab's session
+ * history is still empty.
+ *
+ * Discarding a tab in that state throws away the only record of where it was
+ * pointed, so it comes back as a blank New Tab page instead of the saved URL.
+ * That is exactly what happened to every restored background tab before this
+ * check existed.
+ *
+ * Returns true when the tab committed and is therefore safe to discard.
+ */
+async function waitForCommit(tabId, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    let tab;
+    try {
+      tab = await chrome.tabs.get(tabId);
+    } catch {
+      return false; // tab closed underneath us
+    }
+
+    if (tab.discarded) return false; // already unloaded; nothing to do
+    // A committed URL is the signal. `pendingUrl` set with an empty `url`
+    // means the navigation is still in flight.
+    if (tab.url && tab.url !== "chrome://newtab/") return true;
+    if (tab.status === "complete" && !tab.pendingUrl) return true;
+
+    await sleep(150);
+  }
+  return false;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Recreate the tab groups a window had, preserving title, colour and collapse. */
@@ -256,14 +309,26 @@ async function regroupTabs(windowId, tabs, tabIds, groups) {
   }
 }
 
-/** Unload every tab except the active one, so restoring costs almost no RAM. */
+/**
+ * Unload every tab except the active one, so a restored workspace costs little RAM.
+ *
+ * A tab is only discarded once its navigation has committed — discarding earlier
+ * loses the URL. Tabs that never commit (offline, very slow, or a page that hangs)
+ * are deliberately left loaded: a loaded tab is a far better outcome than a blank one.
+ */
 async function discardInactiveTabs(tabIds, activeTabId) {
-  for (const id of tabIds) {
-    if (id === activeTabId) continue;
+  const candidates = tabIds.filter((id) => id !== activeTabId);
+
+  // Wait in parallel — Chrome throttles concurrent loads on its own, and doing
+  // this serially would take the sum of every page's load time.
+  const commits = await Promise.all(candidates.map((id) => waitForCommit(id)));
+
+  for (let i = 0; i < candidates.length; i++) {
+    if (!commits[i]) continue; // never committed — leave it alone
     try {
-      await chrome.tabs.discard(id);
+      await chrome.tabs.discard(candidates[i]);
     } catch {
-      // A tab still navigating cannot be discarded yet; harmless.
+      // Active, already discarded, or closed. Harmless.
     }
   }
 }
@@ -285,7 +350,7 @@ async function handleCommand(cfg, cmd) {
   let result = { id: cmd.id, type: cmd.type, ok: true };
   try {
     if (cmd.type === "restore") {
-      result.restored = await restoreWindows(cmd.windows);
+      result.restored = await restoreWindows(cmd.windows, cfg);
     } else if (cmd.type === "close") {
       result.closed = await closeWindows(cmd.window_ids);
     } else {

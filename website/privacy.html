@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy Policy — Stash</title>
+<meta name="description" content="Privacy policy for the Stash desktop app and the Stash Bridge browser extension." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%231c1d21'/%3E%3Cpath d='M12 4l7 4v8l-7 4-7-4V8z' fill='%236ee7b7'/%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg-base: #111214; --bg-surface: #1c1d21; --bg-elevated: #25262b;
+    --border: #2e3038; --accent: #6ee7b7;
+    --text-primary: #f4f4f5; --text-secondary: #a1a1aa; --text-muted: #71717a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg-base); color: var(--text-primary);
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.65; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 56px 24px 80px; }
+  a { color: var(--accent); }
+  h1 { font-size: 2rem; letter-spacing: -0.02em; margin-bottom: 6px; }
+  .updated { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 34px; }
+  h2 { font-size: 1.15rem; margin: 32px 0 10px; letter-spacing: -0.01em; }
+  p, li { color: var(--text-secondary); }
+  ul { margin: 10px 0 0 20px; }
+  li { margin-bottom: 6px; }
+  .highlight {
+    background: var(--accent-glow, rgba(110,231,183,0.08));
+    border: 1px solid rgba(110, 231, 183, 0.3);
+    border-radius: 12px; padding: 18px 20px; margin: 26px 0;
+  }
+  .highlight strong { color: var(--accent); }
+  code {
+    background: var(--bg-elevated); padding: 1px 6px; border-radius: 4px;
+    font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; color: var(--text-primary);
+  }
+  footer { margin-top: 48px; padding-top: 22px; border-top: 1px solid var(--border);
+           font-size: 0.85rem; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Privacy Policy</h1>
+  <p class="updated">Applies to the Stash desktop application and the Stash Bridge browser
+     extension. Last updated 9 August 2026.</p>
+
+  <div class="highlight">
+    <strong>The short version</strong>
+    <p style="margin-top:6px;">
+      Stash collects nothing, transmits nothing, and has no servers. All data stays on
+      your computer. There is no account, no analytics, no telemetry, and no crash
+      reporting. Neither the app nor the extension makes a single request to the internet.
+    </p>
+  </div>
+
+  <h2>What the desktop app stores</h2>
+  <p>
+    Stash saves your workspaces to a single <code>workspaces.json</code> file inside your
+    operating system's application-data folder. It contains:
+  </p>
+  <ul>
+    <li>names you give your workspaces and templates, and any tags you add</li>
+    <li>the file path, window title, position and size of each captured application</li>
+    <li>for VS Code windows, the project folder path</li>
+    <li>for terminal windows, the working directory</li>
+    <li>for browser windows, the tab and tab-group information described below</li>
+  </ul>
+  <p style="margin-top:10px;">
+    This file never leaves your machine. You can read, edit, back up or delete it at any
+    time. Deleting it erases everything Stash knows.
+  </p>
+
+  <h2>What the browser extension accesses</h2>
+  <p>
+    Stash Bridge exists for one purpose: to let the Stash desktop app save and restore
+    your browser windows. To do that it reads, from non-incognito windows only:
+  </p>
+  <ul>
+    <li>window position, size and state</li>
+    <li>tab URLs and page titles, plus whether a tab is pinned or active</li>
+    <li>tab group names, colours and collapsed state</li>
+  </ul>
+
+  <h2>Where that information goes</h2>
+  <p>
+    Only to the Stash application running on the same computer, over a loopback
+    connection to <code>127.0.0.1</code>. Loopback traffic never leaves the device — it is
+    not routed to any network. The extension declares no other host permissions, so it is
+    technically incapable of sending your data anywhere else.
+  </p>
+  <p style="margin-top:10px;">
+    The connection is protected by a pairing token you copy from Stash into the extension,
+    which prevents other software on your computer from requesting your tab list.
+  </p>
+
+  <h2>What is never collected</h2>
+  <ul>
+    <li><strong>Incognito and private windows</strong> — excluded entirely</li>
+    <li>page contents, cookies, passwords, form data or browsing history</li>
+    <li>personal or device identifiers of any kind</li>
+    <li>usage analytics or telemetry</li>
+  </ul>
+
+  <h2>Third parties</h2>
+  <p>
+    There are none. No data is sold, shared, or transferred to anyone, because no data is
+    ever collected in the first place.
+  </p>
+
+  <h2>Changes</h2>
+  <p>
+    Any change to this policy will be published on this page and in the project's
+    <a href="https://github.com/CollinFiske/stash">public repository</a>, where the full
+    history of this document is visible.
+  </p>
+
+  <h2>Contact</h2>
+  <p>
+    Questions or concerns:
+    <a href="https://github.com/CollinFiske/stash/issues">open an issue on GitHub</a>.
+  </p>
+
+  <footer>
+    <a href="./index.html">← Back to Stash</a>
+  </footer>
+
+</div>
+</body>
+</html>

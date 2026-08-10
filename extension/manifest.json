@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Stash Bridge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Lets the Stash desktop app capture, close and restore your browser windows, tabs and tab groups.",
   "permissions": ["tabs", "tabGroups", "storage", "alarms"],
   "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],

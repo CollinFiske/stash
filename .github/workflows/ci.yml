@@ -1,0 +1,33 @@
+name: CI
+
+# Runs the same seven gates as `bun run validate` on every push and PR, so a
+# broken commit is caught before it reaches a release tag.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - run: bun install --frozen-lockfile
+
+      # `validate` runs everything in sequence and reports which gate failed.
+      - run: bun run validate
