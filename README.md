@@ -19,17 +19,10 @@ file in your OS app-data folder.
 | Windows | `Stash_x64-setup.exe` | Per-user install, no admin required |
 | Linux | `Stash_amd64.AppImage` | Runs on any distro — `chmod +x` it first |
 | Linux | `.deb` / `.rpm` | For Debian/Ubuntu and Fedora/RHEL |
-| macOS | Coming Soon!! |
-
-macOS is not built yet: unsigned macOS apps are blocked by Gatekeeper, and
-notarisation requires a paid Apple Developer account. Building from source works.
-
-> **Windows will warn you.** Stash is not code-signed, so you will see
-> *"Windows protected your PC"*. Click **More info → Run anyway**. The source is
-> right here if you would rather read it or build it yourself.
+| macOS | n/a | Coming Soon!! |
 
 Browser-tab capture additionally needs the companion extension —
-see **[docs/BROWSER-EXTENSION.md](docs/BROWSER-EXTENSION.md)**.
+download from chrome web store: placeholderlink
 
 ---
 
@@ -40,11 +33,11 @@ see **[docs/BROWSER-EXTENSION.md](docs/BROWSER-EXTENSION.md)**.
 | **Any window** | — | executable, title, position, size, monitor |
 | **VS Code** | window title only shows a folder *name* | the **absolute project path**, resolved from VS Code's own `workspaceStorage` |
 | **Terminals** | reopen at the shell's default directory | the **working directory** the shell was actually in |
-| **Browsers** | the OS cannot see a single tab | every **tab, pinned tab and tab group**, via the [Stash Bridge extension](docs/BROWSER-EXTENSION.md) |
+| **Browsers** | the OS cannot see a single tab | every **tab, pinned tab and tab group**, via the [Stash Bridge extension](extension/) |
 
 ---
 
-## How It Works (Under the Hood)
+## How It Works
 
 ### IPC Bridge
 
@@ -249,18 +242,14 @@ stash/
 - WebView2 Runtime (ships with Windows 11; downloadable for Windows 10)
 - Terminal working-directory reading requires a 64-bit build (the default).
 
-### macOS
-- Xcode Command Line Tools: `xcode-select --install`
-- **Accessibility permission**: On first launch macOS prompts to grant Stash
-  access to the Accessibility API (required for window enumeration and
-  AppleScript positioning). Grant it in
-  *System Settings → Privacy & Security → Accessibility*.
-
 ### Linux
 - `libwebkit2gtk-4.1-dev` (Debian/Ubuntu) or equivalent
 - `libayatana-appindicator3-dev` (optional, for tray support)
 - `xdotool` for window positioning
 - x-win uses X11; Wayland is supported via XWayland.
+
+### macOS
+- Coming Soon!!
 
 ---
 
@@ -272,14 +261,10 @@ bun tauri dev        # 2. Dev server (hot-reload frontend + Rust recompile)
 bun tauri build      # 3. Release bundle
 ```
 
-The first `tauri dev` compiles all Rust crates (including x-win), which takes a
-few minutes. Subsequent runs are incremental.
-
 ### Browser tabs
 
 Tab capture needs the companion Chrome extension.
-See **[docs/BROWSER-EXTENSION.md](docs/BROWSER-EXTENSION.md)** for the two-minute
-install and pairing walkthrough. Everything else works without it.
+See **[entension](extension/)** 
 
 ---
 
@@ -330,7 +315,7 @@ Restored background tabs are **discarded immediately** by the extension — they
 appear in the tab strip but consume no memory until clicked. Reopening a 40-tab
 workspace does not load 40 pages.
 
-### Incognito
+### Incognito / Private Browsing
 The extension never captures incognito windows.
 
 ### Global shortcut conflicts
