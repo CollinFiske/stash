@@ -19,6 +19,7 @@ file in your OS app-data folder.
 | Windows | `Stash_x64-setup.exe` | Per-user install, no admin required |
 | Linux | `Stash_amd64.AppImage` | Runs on any distro — `chmod +x` it first |
 | Linux | `.deb` / `.rpm` | For Debian/Ubuntu and Fedora/RHEL |
+| macOS | Coming Soon!! |
 
 macOS is not built yet: unsigned macOS apps are blocked by Gatekeeper, and
 notarisation requires a paid Apple Developer account. Building from source works.
