@@ -297,7 +297,7 @@ h2 {
   padding-top: 2px;
 }
 
-/* Right column of card-top: close btn + kebab */
+/* Right column of card-top: the ⋮ overflow menu */
 .card-top-right {
   display: flex;
   align-items: center;
@@ -931,6 +931,16 @@ h2 {
   color: var(--text-primary);
 }
 
+.kebab-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.kebab-item:disabled:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
 .kebab-item-danger {
   color: var(--danger);
 }
@@ -938,6 +948,29 @@ h2 {
 .kebab-item-danger:hover {
   background: rgba(248, 113, 113, 0.1);
   color: var(--danger);
+}
+
+.kebab-item-danger:disabled:hover {
+  background: transparent;
+  color: var(--danger);
+}
+
+/* Hard Freeze entry while a schedule is armed — amber, as the old clock icon
+   was, so the freeze colour language survives the move into the menu. */
+.kebab-item-on {
+  color: #fbbf24;
+}
+
+.kebab-item-on:hover {
+  color: #fde68a;
+  background: rgba(251, 191, 36, 0.1);
+}
+
+/* Splits the workspace actions from Edit/Delete. */
+.kebab-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 2px 0;
 }
 
 /* ── Hamburger menu (header far right) ───────────────────────────────────── */
@@ -1036,34 +1069,6 @@ h2 {
   color: #fbbf24;
   background: rgba(251, 191, 36, 0.1);
   border-color: rgba(251, 191, 36, 0.2);
-}
-
-/* ── Close Apps button ────────────────────────────────────────────────────── */
-.btn-close-apps {
-  background: rgba(217, 119, 6, 0.12);
-  color: #fbbf24;
-  border: 1px solid rgba(217, 119, 6, 0.3);
-  padding: 3px 9px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-  cursor: pointer;
-  transition: background var(--transition), border-color var(--transition);
-}
-
-.btn-close-apps:hover {
-  background: rgba(217, 119, 6, 0.22);
-  border-color: rgba(217, 119, 6, 0.5);
-}
-
-.btn-close-apps:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.btn-close-apps-tmpl {
-  color: #fbbf24;
 }
 
 /* ── Header actions cluster ───────────────────────────────────────────────── */
@@ -1242,45 +1247,6 @@ h2 {
   line-height: 1.65;
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
-}
-
-/* ── Freeze clock icon on cards ──────────────────────────────────────────── */
-.freeze-icon-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 3px 5px;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--transition), background var(--transition);
-  flex-shrink: 0;
-}
-
-.freeze-icon-btn svg {
-  width: 15px;
-  height: 15px;
-}
-
-.freeze-icon-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.freeze-icon-active {
-  color: #fbbf24 !important;
-}
-
-.freeze-icon-active:hover {
-  color: #fde68a !important;
-  background: rgba(251, 191, 36, 0.1) !important;
-}
-
-.freeze-icon-set {
-  color: var(--text-muted);
-  opacity: 0.6;
 }
 
 /* ── Hard Freeze modal ───────────────────────────────────────────────────── */

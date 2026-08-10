@@ -1,7 +1,37 @@
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from "vue";
 
-const emit = defineEmits<{ edit: []; delete: [] }>();
+/**
+ * Card overflow menu.  Edit/Delete are always present; the workspace actions
+ * above them are opt-in so cards that have no notion of "running" or of a
+ * freeze schedule keep the plain two-item menu.
+ */
+withDefaults(
+  defineProps<{
+    /** Show "Close Apps" — only meaningful while the workspace is running. */
+    showCloseApps?: boolean;
+    /** Grey out "Close Apps" (e.g. a launch is still in flight). */
+    closeAppsDisabled?: boolean;
+    /** Show the "Hard Freeze" entry. */
+    showHardFreeze?: boolean;
+    /** Freeze entry label — carries the schedule when one is set. */
+    hardFreezeLabel?: string;
+    /** Tooltip for the freeze entry. */
+    hardFreezeTitle?: string;
+    /** Highlight the freeze entry while a schedule is armed. */
+    hardFreezeOn?: boolean;
+  }>(),
+  {
+    showCloseApps: false,
+    closeAppsDisabled: false,
+    showHardFreeze: false,
+    hardFreezeLabel: "Freeze",
+    hardFreezeTitle: "",
+    hardFreezeOn: false,
+  },
+);
+
+const emit = defineEmits<{ edit: []; delete: []; closeApps: []; hardFreeze: [] }>();
 
 const open = ref(false);
 const wrapRef = ref<HTMLElement | null>(null);
@@ -24,8 +54,29 @@ watch(open, (val) => {
 
 onUnmounted(() => document.removeEventListener("click", handleOutside));
 
-function doEdit() { emit("edit"); open.value = false; }
-function doDelete() { emit("delete"); open.value = false; }
+function closeMenu() {
+  open.value = false;
+}
+
+function doEdit() {
+  emit("edit");
+  closeMenu();
+}
+
+function doDelete() {
+  emit("delete");
+  closeMenu();
+}
+
+function doCloseApps() {
+  emit("closeApps");
+  closeMenu();
+}
+
+function doHardFreeze() {
+  emit("hardFreeze");
+  closeMenu();
+}
 </script>
 
 <template>
@@ -37,6 +88,24 @@ function doDelete() { emit("delete"); open.value = false; }
       aria-label="Options"
     >⋮</button>
     <div v-if="open" class="kebab-menu" role="menu">
+      <template v-if="showCloseApps || showHardFreeze">
+        <button
+          v-if="showCloseApps"
+          class="kebab-item kebab-item-danger"
+          @click="doCloseApps"
+          :disabled="closeAppsDisabled"
+          role="menuitem"
+        >Close Apps</button>
+        <button
+          v-if="showHardFreeze"
+          class="kebab-item"
+          :class="{ 'kebab-item-on': hardFreezeOn }"
+          @click="doHardFreeze"
+          :title="hardFreezeTitle"
+          role="menuitem"
+        >{{ hardFreezeLabel }}</button>
+        <div class="kebab-sep" role="separator"></div>
+      </template>
       <button class="kebab-item" @click="doEdit" role="menuitem">Edit</button>
       <button class="kebab-item kebab-item-danger" @click="doDelete" role="menuitem">Delete</button>
     </div>

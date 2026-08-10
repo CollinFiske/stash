@@ -3,6 +3,7 @@ import type { SavedGroup, CapturedApp } from "../types";
 import AppIcon from "./AppIcon.vue";
 import KebabMenu from "./KebabMenu.vue";
 import { baseName, hostOf, tabSummary, groupTitles } from "../paths";
+import { tagColor, formatDate, formatLastUsed, freezeLabel, freezeTitle } from "../cardFormat";
 
 defineProps<{
   group: SavedGroup;
@@ -23,47 +24,6 @@ const emit = defineEmits<{
   "drop": [e: DragEvent];
   "drag-end": [];
 }>();
-
-const TAG_COLORS = [
-  { bg: "rgba(99,102,241,0.15)", border: "rgba(99,102,241,0.4)", text: "#818cf8" },
-  { bg: "rgba(16,185,129,0.12)", border: "rgba(16,185,129,0.4)", text: "#34d399" },
-  { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.4)", text: "#fbbf24" },
-  { bg: "rgba(239,68,68,0.12)", border: "rgba(239,68,68,0.4)", text: "#f87171" },
-  { bg: "rgba(6,182,212,0.12)", border: "rgba(6,182,212,0.4)", text: "#22d3ee" },
-  { bg: "rgba(168,85,247,0.12)", border: "rgba(168,85,247,0.4)", text: "#c084fc" },
-];
-
-function tagColor(tag: string) {
-  let hash = 0;
-  for (const ch of tag) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
-  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      month: "short", day: "numeric", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}
-
-function formatLastUsed(iso: string): string {
-  try {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    return `${days}d ago`;
-  } catch {
-    return "";
-  }
-}
 
 function chipLabel(app: CapturedApp): string {
   if (app.is_vscode && app.context_path) {
@@ -126,29 +86,18 @@ function chipTitle(app: CapturedApp): string {
         </div>
       </div>
       <div class="card-top-right">
-        <button
-          v-if="active"
-          class="btn btn-close-apps"
-          @click="emit('close-apps')"
-          :disabled="launching"
-          title="Close all apps in this workspace"
-        >✕ Close Apps</button>
-        <button
-          class="freeze-icon-btn"
-          :class="{
-            'freeze-icon-active': group.hard_freeze?.enabled,
-            'freeze-icon-set': group.hard_freeze && !group.hard_freeze.enabled,
-          }"
-          @click="emit('freeze-click')"
-          :title="group.hard_freeze ? (group.hard_freeze.enabled ? `Hard Freeze at ${group.hard_freeze.time}` : 'Hard Freeze (disabled)') : 'Set Hard Freeze'"
-          aria-label="Configure Hard Freeze"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="9"/>
-            <polyline points="12 7 12 12 15 15"/>
-          </svg>
-        </button>
-        <KebabMenu @edit="emit('edit')" @delete="emit('delete')" />
+        <KebabMenu
+          :show-close-apps="active"
+          :close-apps-disabled="launching"
+          show-hard-freeze
+          :hard-freeze-label="freezeLabel(group.hard_freeze)"
+          :hard-freeze-title="freezeTitle(group.hard_freeze)"
+          :hard-freeze-on="group.hard_freeze?.enabled"
+          @close-apps="emit('close-apps')"
+          @hard-freeze="emit('freeze-click')"
+          @edit="emit('edit')"
+          @delete="emit('delete')"
+        />
       </div>
     </div>
 
