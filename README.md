@@ -302,7 +302,7 @@ TypeScript halves:
 ### Multiple windows of the same app
 Two VS Code windows, three Chrome windows and two terminals in one workspace all
 restore to their own positions. `WindowClaimer` guarantees exclusivity — see 
-*Window Restore* above.
+*Window Restore* above. .
 
 ### Window positioning fallback
 Repositioning is best-effort. If an app takes longer than ~12 seconds to show its
