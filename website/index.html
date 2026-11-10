@@ -4,11 +4,12 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Stash — Save and restore your workspace</title>
-<meta name="description" content="Stash saves your open apps, window positions, VS Code projects, terminal directories and browser tabs as a named workspace — and brings them all back in one click." />
+<meta name="description" content="Stash saves your open apps, window positions, VS Code projects, terminal directories and browser tabs as a named workspace, and brings them all back in one click." />
 <meta property="og:title" content="Stash — Save and restore your workspace" />
 <meta property="og:description" content="Close everything at the end of the day. Get it all back tomorrow, exactly where you left it." />
 <meta property="og:type" content="website" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%231c1d21'/%3E%3Cpath d='M12 4l7 4v8l-7 4-7-4V8z' fill='%236ee7b7'/%3E%3C/svg%3E" />
+<meta property="og:image" content="/logo.png" />
+<link rel="icon" type="image/png" href="/favicon.png" />
 <style>
   :root {
     --bg-base: #111214;
@@ -16,13 +17,10 @@
     --bg-elevated: #25262b;
     --border: #2e3038;
     --accent: #6ee7b7;
-    --accent-dark: #059669;
-    --accent-glow: rgba(110, 231, 183, 0.15);
-    --warn: #fbbf24;
     --text-primary: #f4f4f5;
     --text-secondary: #a1a1aa;
     --text-muted: #71717a;
-    --radius: 12px;
+    --radius: 14px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -32,76 +30,72 @@
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
   a { color: var(--accent); }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px; }
 
-  /* ── Hero ─────────────────────────────────────────────────────────── */
-  header { padding: 72px 0 56px; text-align: center; }
-  .logo {
-    width: 92px; height: 92px; margin: 0 auto 22px; border-radius: 22px;
-    background: var(--bg-surface); border: 1px solid var(--border);
-    display: flex; align-items: center; justify-content: center;
-  }
-  .logo svg { width: 56px; height: 56px; }
-  h1 { font-size: clamp(2.1rem, 6vw, 3.1rem); letter-spacing: -0.03em; line-height: 1.1; }
+  /* Hero */
+  header { padding: 80px 0 48px; text-align: center; }
+  .logo { width: 112px; height: 112px; display: block; margin: 0 auto 24px; }
+  h1 { font-size: clamp(2.2rem, 7vw, 3.2rem); letter-spacing: -0.03em; line-height: 1.1; }
   .tagline {
-    font-size: clamp(1rem, 2.6vw, 1.2rem); color: var(--text-secondary);
-    max-width: 30ch; margin: 16px auto 0;
+    font-size: clamp(1.05rem, 2.8vw, 1.25rem); color: var(--text-secondary);
+    max-width: 34ch; margin: 14px auto 0;
   }
 
-  /* ── Download ─────────────────────────────────────────────────────── */
-  .download { margin-top: 34px; }
+  /* Downloads */
+  .downloads {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px; margin-top: 8px;
+  }
+  .platform {
+    background: var(--bg-surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px 20px; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .platform.mine { border-color: var(--accent); }
+  .platform h2 { font-size: 1.15rem; letter-spacing: -0.01em; }
+  .platform .file { font-size: 0.82rem; color: var(--text-muted); min-height: 1.3em; }
   .btn {
-    display: inline-flex; align-items: center; gap: 9px;
-    background: var(--accent); color: #06281c; font-weight: 700; font-size: 1rem;
-    padding: 14px 28px; border-radius: 10px; text-decoration: none;
-    border: none; cursor: pointer; transition: filter 140ms ease, transform 140ms ease;
+    margin-top: 10px; display: inline-block; width: 100%;
+    background: var(--accent); color: #06281c; font-weight: 700; font-size: 0.95rem;
+    padding: 11px 18px; border-radius: 10px; text-decoration: none;
+    transition: filter 140ms ease, transform 140ms ease;
   }
   .btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
-  .btn[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
-  .meta { margin-top: 11px; font-size: 0.83rem; color: var(--text-muted); }
-  .alt-links { margin-top: 16px; font-size: 0.85rem; color: var(--text-muted); }
-  .alt-links a { margin: 0 7px; white-space: nowrap; }
-
-  /* ── Warning callout ──────────────────────────────────────────────── */
-  .callout {
-    margin: 40px auto 0; max-width: 620px; text-align: left;
-    background: rgba(251, 191, 36, 0.07); border: 1px solid rgba(251, 191, 36, 0.3);
-    border-radius: var(--radius); padding: 16px 18px; font-size: 0.88rem;
-    color: var(--text-secondary);
+  .soon {
+    margin-top: 10px; width: 100%; padding: 11px 18px; border-radius: 10px;
+    border: 1px dashed var(--border); color: var(--text-secondary); font-weight: 600;
+    font-size: 0.95rem;
   }
-  .callout strong { color: var(--warn); display: block; margin-bottom: 5px; }
-  .callout code {
-    background: var(--bg-elevated); padding: 1px 6px; border-radius: 4px;
-    font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; color: var(--text-primary);
+  .extra { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+  .extra a { margin: 0 4px; }
+  .note {
+    margin-top: 18px; font-size: 0.82rem; color: var(--text-muted); text-align: center;
   }
 
-  /* ── Sections ─────────────────────────────────────────────────────── */
-  section { padding: 60px 0; border-top: 1px solid var(--border); }
-  h2 { font-size: 1.5rem; letter-spacing: -0.02em; margin-bottom: 10px; }
-  .sub { color: var(--text-secondary); margin-bottom: 30px; max-width: 62ch; }
-
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
-  .card {
+  /* Features */
+  section { padding: 56px 0; }
+  section + section { border-top: 1px solid var(--border); }
+  .section-title { font-size: 1.4rem; letter-spacing: -0.02em; margin-bottom: 22px; text-align: center; }
+  .features {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px;
+  }
+  .feature {
     background: var(--bg-surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 20px;
+    border-radius: var(--radius); padding: 18px 20px;
   }
-  .card h3 { font-size: 0.98rem; margin-bottom: 7px; display: flex; align-items: center; gap: 8px; }
-  .card p { font-size: 0.88rem; color: var(--text-secondary); }
-  .card .ico { font-size: 1.1rem; }
-
-  ol.steps { margin-left: 20px; color: var(--text-secondary); font-size: 0.92rem; }
-  ol.steps li { margin-bottom: 9px; }
+  .feature h3 { font-size: 0.98rem; margin-bottom: 5px; }
+  .feature p { font-size: 0.88rem; color: var(--text-secondary); }
 
   footer {
-    border-top: 1px solid var(--border); padding: 34px 0 56px;
+    border-top: 1px solid var(--border); padding: 30px 0 48px;
     font-size: 0.85rem; color: var(--text-muted);
     display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: center;
   }
 
   @media (max-width: 560px) {
-    header { padding: 48px 0 40px; }
-    section { padding: 44px 0; }
+    header { padding: 52px 0 36px; }
+    section { padding: 40px 0; }
   }
 </style>
 </head>
@@ -109,183 +103,129 @@
 
 <header>
   <div class="wrap">
-    <div class="logo" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none">
-        <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" fill="#6ee7b7"/>
-        <path d="M12 3l8 4.5-8 4.5-8-4.5z" fill="#92f2cd"/>
-        <path d="M12 12v9l8-4.5v-9z" fill="#34b085"/>
-      </svg>
-    </div>
-    <h1>Get your workspace back</h1>
+    <img class="logo" src="/logo.png" alt="Stash logo" width="112" height="112" />
+    <h1>Stash</h1>
     <p class="tagline">
-      Close everything at the end of the day. Open it all again tomorrow, exactly where you left it.
+      Save your open windows as a workspace. Close everything, then bring it all back
+      exactly where you left it.
     </p>
-
-    <div class="download">
-      <a class="btn" id="primary-dl" href="https://github.com/CollinFiske/stash/releases">
-        <span id="dl-label">Download</span>
-      </a>
-      <div class="meta" id="dl-meta">Loading the latest release…</div>
-      <div class="alt-links" id="alt-links"></div>
-    </div>
-
-    <div class="callout" id="win-warning" hidden>
-      <strong>Windows will warn you — that's expected</strong>
-      Stash isn't code-signed yet, so Windows shows <em>"Windows protected your PC"</em>.
-      Click <code>More info</code> then <code>Run anyway</code>. Signing certificates cost
-      a few hundred dollars a year; until that's worth it, the source is public so you can
-      read exactly what you're running, or build it yourself.
-    </div>
   </div>
 </header>
 
-<section>
+<section id="download" style="padding-top: 0;">
   <div class="wrap">
-    <h2>What it actually saves</h2>
-    <p class="sub">
-      Most "session restore" tools reopen your apps. Stash reopens your <em>work</em> —
-      the project you had open, the folder your terminal was in, the tabs you were reading.
-    </p>
-    <div class="grid">
-      <div class="card">
-        <h3><span class="ico">🗂️</span> Window layout</h3>
-        <p>Every window's position and size, stored as a fraction of its monitor — so a layout
-           captured on a 4K desktop restores sensibly on a laptop.</p>
+    <div class="downloads">
+      <div class="platform" id="card-windows">
+        <h2>Windows</h2>
+        <div class="file" id="file-windows">Windows 10 and 11</div>
+        <a class="btn" id="dl-windows" href="https://github.com/CollinFiske/stash/releases/latest">Download for Windows</a>
       </div>
-      <div class="card">
-        <h3><span class="ico">📘</span> VS Code projects</h3>
-        <p>Reopens the actual project folder, not a blank editor. Two windows on two
-           different projects come back as two windows.</p>
+
+      <div class="platform" id="card-linux">
+        <h2>Linux</h2>
+        <div class="file" id="file-linux">AppImage</div>
+        <a class="btn" id="dl-linux" href="https://github.com/CollinFiske/stash/releases/latest">Download for Linux</a>
+        <div class="extra" id="linux-extra"></div>
       </div>
-      <div class="card">
-        <h3><span class="ico">⌨️</span> Terminal directories</h3>
-        <p>Your shell reopens in the directory it was working in, instead of dumping you
-           back at your home folder.</p>
-      </div>
-      <div class="card">
-        <h3><span class="ico">🌐</span> Browser tabs</h3>
-        <p>With the companion extension, every tab, pinned tab and tab group comes back —
-           and restored background tabs stay unloaded, so they cost no memory.</p>
-      </div>
-      <div class="card">
-        <h3><span class="ico">📋</span> Templates</h3>
-        <p>Define a set of apps once — "frontend work", "code review" — and launch that
-           arrangement whenever you switch context.</p>
-      </div>
-      <div class="card">
-        <h3><span class="ico">🔒</span> Entirely local</h3>
-        <p>No account, no cloud, no telemetry. Everything lives in one JSON file on your
-           machine and nothing is sent anywhere.</p>
+
+      <div class="platform" id="card-macos">
+        <h2>macOS</h2>
+        <div class="file">Apple Silicon and Intel</div>
+        <div class="soon">Coming soon</div>
       </div>
     </div>
+    <p class="note">
+      Stash isn't code-signed yet, so Windows may show "Windows protected your PC".
+      Click <strong>More info</strong>, then <strong>Run anyway</strong>.
+    </p>
   </div>
 </section>
 
 <section>
   <div class="wrap">
-    <h2>Browser tabs need the extension</h2>
-    <p class="sub">
-      No operating system exposes browser tabs to other applications — so without the
-      companion extension, Stash can tell that Chrome was open but not what was in it.
-      Everything else works either way.
-    </p>
-    <ol class="steps">
-      <li>Install <strong>Stash Bridge</strong> from the Chrome Web Store.</li>
-      <li>Open Stash and click <strong>Browser</strong> in the header.</li>
-      <li>Copy the pairing token and paste it into the extension's settings.</li>
-    </ol>
-    <p class="sub" style="margin-top:22px; margin-bottom:0;">
-      The extension talks only to <code style="background:var(--bg-elevated);padding:1px 6px;border-radius:4px;">127.0.0.1</code>
-      on your own machine, never captures incognito windows, and sends nothing to the internet.
-      <a href="./privacy.html">Read the privacy policy</a>.
-    </p>
+    <h2 class="section-title">What it saves</h2>
+    <div class="features">
+      <div class="feature">
+        <h3>Window layout</h3>
+        <p>Every window's position and size, scaled to fit whatever monitor you restore on.</p>
+      </div>
+      <div class="feature">
+        <h3>VS Code projects</h3>
+        <p>Reopens the project folders you had open, each in its own window.</p>
+      </div>
+      <div class="feature">
+        <h3>Terminal folders</h3>
+        <p>Your terminals reopen in the folder they were in, not your home directory.</p>
+      </div>
+      <div class="feature">
+        <h3>Browser tabs</h3>
+        <p>With the companion extension, every tab, pinned tab and tab group comes back.</p>
+      </div>
+      <div class="feature">
+        <h3>Templates</h3>
+        <p>Set up a group of apps once and launch it whenever you switch tasks.</p>
+      </div>
+      <div class="feature">
+        <h3>Entirely local</h3>
+        <p>No account, no cloud, no telemetry. Your workspaces stay on your machine.</p>
+      </div>
+    </div>
   </div>
 </section>
 
 <footer>
   <span>MIT licensed</span>
   <a href="https://github.com/CollinFiske/stash">Source on GitHub</a>
-  <a href="https://github.com/CollinFiske/stash/issues">Report a bug</a>
   <a href="https://github.com/CollinFiske/stash/releases">All releases</a>
-  <a href="./privacy.html">Privacy</a>
+  <a href="https://github.com/CollinFiske/stash/issues">Report a bug</a>
+  <a href="/privacy">Privacy</a>
 </footer>
 
 <script>
+  // The download buttons start out pointing at the latest release page. If the
+  // GitHub API answers, swap them for direct links to the installer files.
+  // Installer names include the version, so they can't be hard-coded.
   const REPO = "CollinFiske/stash";
-  const RELEASES = `https://github.com/${REPO}/releases`;
 
-  /** Best guess at the visitor's OS, so the primary button is the right one. */
-  function detectOS() {
-    const ua = navigator.userAgent;
-    if (/Windows/i.test(ua)) return "windows";
-    if (/Mac OS X|Macintosh/i.test(ua)) return "macos";
-    if (/Linux|X11/i.test(ua)) return "linux";
-    return "unknown";
-  }
-
-  /** Pick the asset a given platform should download. */
-  function pickAsset(assets, os) {
-    const by = (re) => assets.find((a) => re.test(a.name));
-    if (os === "windows") return by(/-setup\.exe$/i) || by(/\.msi$/i);
-    if (os === "linux") return by(/\.AppImage$/i) || by(/\.deb$/i);
-    return null;
-  }
-
-  function human(bytes) {
+  function mb(bytes) {
     return bytes ? ` · ${(bytes / 1048576).toFixed(1)} MB` : "";
   }
 
-  async function init() {
-    const os = detectOS();
-    const btn = document.getElementById("primary-dl");
-    const label = document.getElementById("dl-label");
-    const meta = document.getElementById("dl-meta");
-    const alt = document.getElementById("alt-links");
+  // Highlight the card for the visitor's OS.
+  const ua = navigator.userAgent;
+  const os = /Windows/i.test(ua) ? "windows"
+           : /Mac OS X|Macintosh/i.test(ua) ? "macos"
+           : /Linux|X11/i.test(ua) ? "linux" : null;
+  if (os) document.getElementById(`card-${os}`).classList.add("mine");
 
-    if (os === "windows") document.getElementById("win-warning").hidden = false;
-
-    // macOS is not built yet — say so plainly rather than offering a dead link.
-    if (os === "macos") {
-      label.textContent = "Not available for macOS yet";
-      btn.setAttribute("aria-disabled", "true");
-      meta.innerHTML =
-        `macOS builds need an Apple Developer certificate to run at all. ` +
-        `You can <a href="${REPO ? `https://github.com/${REPO}` : "#"}">build from source</a> in the meantime.`;
-      return;
-    }
-
-    try {
-      const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
-      if (!res.ok) throw new Error(String(res.status));
-      const rel = await res.json();
+  fetch(`https://api.github.com/repos/${REPO}/releases/latest`)
+    .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+    .then((rel) => {
       const assets = rel.assets || [];
+      const find = (re) => assets.find((a) => re.test(a.name));
 
-      const primary = pickAsset(assets, os);
-      if (primary) {
-        btn.href = primary.browser_download_url;
-        label.textContent =
-          os === "windows" ? "Download for Windows" : "Download for Linux";
-        meta.textContent = `${rel.tag_name}${human(primary.size)}`;
-      } else {
-        label.textContent = "View downloads";
-        btn.href = RELEASES;
-        meta.textContent = `${rel.tag_name} — no build for your platform yet`;
+      const win = find(/-setup\.exe$/i) || find(/\.msi$/i);
+      if (win) {
+        document.getElementById("dl-windows").href = win.browser_download_url;
+        document.getElementById("file-windows").textContent = `${rel.tag_name} · .exe${mb(win.size)}`;
       }
 
-      // Everything else, so people on other machines can still grab a build.
-      const others = assets
-        .filter((a) => a !== primary && /\.(exe|msi|AppImage|deb|rpm)$/i.test(a.name))
-        .map((a) => `<a href="${a.browser_download_url}">${a.name.split("_").pop()}</a>`);
-      if (others.length) alt.innerHTML = "Also available: " + others.join("·");
-    } catch {
-      // Unreleased yet, offline, or the API rate limit was hit (60/hr per IP).
-      label.textContent = "View downloads on GitHub";
-      btn.href = RELEASES;
-      meta.textContent = "Could not reach the GitHub API — the releases page has every build.";
-    }
-  }
+      const appimage = find(/\.AppImage$/i);
+      if (appimage) {
+        document.getElementById("dl-linux").href = appimage.browser_download_url;
+        document.getElementById("file-linux").textContent = `${rel.tag_name} · AppImage${mb(appimage.size)}`;
+      }
 
-  init();
+      const extras = [find(/\.deb$/i), find(/\.rpm$/i)]
+        .filter(Boolean)
+        .map((a) => `<a href="${a.browser_download_url}">.${a.name.split(".").pop()}</a>`);
+      if (extras.length) {
+        document.getElementById("linux-extra").innerHTML = "Also: " + extras.join(" ");
+      }
+    })
+    .catch(() => {
+      // No release yet, offline, or rate-limited: the buttons still go to the releases page.
+    });
 </script>
 
 </body>

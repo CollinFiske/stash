@@ -350,6 +350,14 @@ distributions.
 Building locally with `bun tauri build` produces artifacts for **your** platform only,
 under `src-tauri/target/release/bundle/`.
 
+## Website
+
+The landing page lives in [`website/`](website/) as plain HTML with no build step,
+and is hosted on Vercel with the project's **Root Directory** set to `website`.
+Download buttons find the installers in the latest GitHub Release at page load, so
+cutting a release doesn't require redeploying the site. Vercel skips deploys for
+commits that don't touch `website/`.
+
 ## Contributing
 
 Bug reports and pull requests are welcome. Run `bun run validate` before opening a PR —
