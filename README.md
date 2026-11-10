@@ -355,8 +355,7 @@ under `src-tauri/target/release/bundle/`.
 The landing page lives in [`website/`](website/) as plain HTML with no build step,
 and is hosted on Vercel with the project's **Root Directory** set to `website`.
 Download buttons find the installers in the latest GitHub Release at page load, so
-cutting a release doesn't require redeploying the site. Vercel skips deploys for
-commits that don't touch `website/`.
+cutting a release doesn't require redeploying the site.
 
 ## Contributing
 
